@@ -1,0 +1,80 @@
+\documentclass[man,floatmark,12pt]{apa}
+
+\usepackage{amsmath,bm,a4wide,graphicx}
+\usepackage[english]{babel}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proof}{Proof}
+
+\begin{document}
+
+%\linespacing{2}
+\section{Definition of ordinal regression}
+
+The dependent random variable $Y$ has ordinal level of measurement. The number of possible values that $Y$ can take is $m+1$. A realization of $Y$ is denoted by $y$ and $y\in\{0,1,\ldots,m\}$. The conditional probability distribution of $Y$ given a set of interval predictors $\mathbf{x}=(x_{1},\ldots,x_{k})'$ is $P(Y=y\!\mid\!\mathbf{x})$. The regression of $Y$ on $\mathbf{x}$ is ordinal if and only if
+\begin{equation}
+P(Y\leq y\!\mid\!\mathbf{x})=\sum_{t=0}^{y}P(Y=t\!\mid\!\mathbf{x}),\ \ \textup{for all $y$},
+\end{equation}
+is a monotonic function of $\mathbf{x}$. If higher values of $y$ are associated with higher values of $\mathbf{x}$, then this function should be non-increasing, for all $y$. If $P(Y\leq y\!\mid\!\mathbf{x})$ is a monotonic function of $x_{i}$, then its derivative with respect to $x_{i}$ is either non-negative or non-positive for all $x_{i}$.
+
+\section{Multinomial logistic regression}
+Let $z_{s}=1$ if $y=s$ and $z_{s}=0$ otherwise, for $s=1,\ldots,m$, then the conditional probability distribution of $Y$ given $\mathbf{x}$ can be written as
+\begin{equation}
+P(Y=y\!\mid\!\mathbf{x})=P(Y=0\!\mid\!\mathbf{x})\prod_{s=1}^{m}\!\left\{\frac{P(Y=s\!\mid\!\mathbf{x})}{P(Y=0\!\mid\!\mathbf{x})}\right\}^{\!z_{s}},
+\end{equation}
+where
+\begin{equation}
+P(Y=0\!\mid\!\mathbf{x})=\left\{1+\sum_{s=1}^{m}\frac{P(Y=s\!\mid\!\mathbf{x})}{P(Y=0\!\mid\!\mathbf{x})}\right\}^{\!-1}.
+\end{equation}
+In the multinomial logistic regression model,
+\begin{equation}
+\frac{P(Y=s\!\mid\!\mathbf{x})}{P(Y=0\!\mid\!\mathbf{x})}=\textup{exp}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x}),\ \textup{for $s=1,\ldots,m$},
+\end{equation}
+where $\bm{\alpha}_{s}=(\alpha_{1s},\ldots,\alpha_{ks})'$, so that
+\begin{equation}
+P(Y=y\!\mid\!\mathbf{x})=\frac{\textup{exp}\left\{\sum\limits_{s=1}^{m}z_{s}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x})\right\}}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x})}.
+\end{equation}
+It follows that
+\begin{equation}
+P(Y\leq y\!\mid\!\mathbf{x})=\left\{\begin{array}{ll}\frac{1}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x})},&\textup{for $y=0$},\\
+\rule{0cm}{1cm}\frac{1+\sum\limits_{s=1}^{y}\textup{exp}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x})}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\bm{\alpha}'_{s}\mathbf{x})},&\textup{for $y>0$}.
+\end{array}\right.
+\end{equation}
+The multinomial logistic regression model has $(k+1)m$ parameters.
+
+\section{Adjacent categories model}
+In general, we have
+\begin{equation}
+\frac{P(Y=s\!\mid\!\mathbf{x})}{P(Y=0\!\mid\!\mathbf{x})}=\prod_{u=1}^{s}\frac{P(Y=u\!\mid\!\mathbf{x})}{P(Y=u-1\!\mid\!\mathbf{x})},\ \textup{for $s=1,\ldots,m$}.
+\end{equation}
+In an adjacent categories model,
+\begin{equation}
+\frac{P(Y=u\!\mid\!\mathbf{x})}{P(Y=u-1\!\mid\!\mathbf{x})}=\textup{exp}(\beta_{0u}+\bm{\beta}_{u}'\mathbf{x}),
+\end{equation}
+where $\bm{\beta}_{u}=(\beta_{1u},\ldots,\beta_{ku})'$, so that $\alpha_{0s}=\sum_{u=1}^{s}\beta_{0u}$ and $\bm{\alpha}_{s}=\sum_{u=1}^{s}\bm{\beta}_{u}$. This general adjacent categories model is just a reparameterization of the multinomial logistic regression model. Under the adjacent categories model, it follows that
+\begin{equation}
+\frac{P(Y=u\!\mid\!\mathbf{x})}{P(Y=u-1\!\mid\!\mathbf{x})+P(Y=u\!\mid\!\mathbf{x})}=\frac{\textup{exp}(\beta_{0u}+\bm{\beta}_{u}'\mathbf{x})}{1+\textup{exp}(\beta_{0u}+\bm{\beta}_{u}'\mathbf{x})}.
+\end{equation}
+
+\section{Ordinal logistic regression}
+\subsection{Adjacent categories}
+In the ordinal logistic adjacent categories model, $\beta_{is}=\beta_{i}$, for $i=1,\ldots,k$ and all $s$, so that $\alpha_{is}=s\beta_{i}$ and
+\begin{equation}
+P(Y=y\!\mid\!x_{1},\dots,x_{k})=\frac{\textup{exp}\!\left(\sum\limits_{s=1}^{m}z_{s}\alpha_{0s}+y\bm{\beta}'\mathbf{x}\right)}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+s\bm{\beta}'\mathbf{x})},
+\end{equation}
+where $\bm{\beta}=(\beta_{1},\ldots,\beta_{k})'$. The ordinal logistic adjacent categories model has $k+m$ parameters.
+
+\subsection{Cumulative probabilities}
+In general, we have
+\[P(Y=y\!\mid\!\mathbf{x})=\left\{\begin{array}{ll}
+\rule{0cm}{0.4cm}\!P(Y\leq 0\!\mid\!\mathbf{x}),&\textup{for $y=0$},\\
+\rule{0cm}{0.5cm}\!P(Y\leq y\!\mid\!\mathbf{x})-P(Y\leq y-1\!\mid\!\mathbf{x}),&\textup{for $y=1,\ldots,m-1$,}\\
+\rule{0cm}{0.5cm}\!1-P(Y\leq m-1\!\mid\!\mathbf{x}),&\textup{for $y=m$}.
+\end{array}\right.\]
+In the ordinal logistic cumulative probabilities model,
+\begin{equation}
+P(Y\leq y\!\mid\!\mathbf{x})=\frac{1}{1+\textup{exp}\{\alpha_{0y}+\bm{\beta}'\mathbf{x}\}},\ \ \textup{for $y=0,1,\ldots,m-1$},
+\end{equation}
+where $\bm{\beta}=(\beta_{1},\ldots,\beta_{k})'>0$. This model has also $k+m$ parameters.
+
+\end{document}
