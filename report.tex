@@ -1,0 +1,104 @@
+\documentclass[12pt]{article}
+
+\usepackage[margin=1in]{geometry} 
+\usepackage{
+	graphicx,		% For image modifications and the figure enviroment
+	subcaption,     %for subfigures
+	amsmath,		% For the AMS math styles
+	amssymb,		% The extended AMS math symbol list
+	amsthm,			% For use of theorems (works together with thmtools)
+	fancyhdr,		% For fancy headers and footers on pages
+	color,			% For handy color deafinitions (used cause of styling)
+	xspace,			% Makes latex not eat spaces after commands
+	hyperref,		% Makes links, references, the Table of Contents, etc. clickable.
+	slashed
+}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
+\renewcommand{\figurename}{Afbeelding}
+
+\newenvironment{theorem}[2][Theorem]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{lemma}[2][Lemma]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{exercise}[2][Exercise]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{reflection}[2][Reflection]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{proposition}[2][Proposition]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{corollary}[2][Corollary]{\begin{trivlist}
+		\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+
+\begin{document}
+	
+% --------------------------------------------------------------
+%                         Start here
+% --------------------------------------
+	
+\title{ADS research project, ordinal data}%replace X with the appropriate number
+\author{F. Meijvis, D. Hessen, C. Spitoni}
+\date{\today}
+	
+\maketitle
+
+\section{Definition of ordinal regression}
+
+The dependent random variable $Y$ has ordinal level of measurement. The number of possible values that $Y$ can take is $m+1$. A realization of $Y$ is denoted by $y$ and $y\in\{0,1,\ldots,m\}$. The conditional probability distribution of $Y$ given a set of interval predictors $\mathbf{x}=(x_{1},\ldots,x_{k})'$ is $P(Y=y\!\mid\!\mathbf{x})$. The regression of $Y$ on $\mathbf{x}$ is ordinal if and only if
+\begin{equation}
+	P(Y\leq y\!\mid\!\vec{x})=\sum_{t=0}^{y}P(Y=t\!\mid\!\vec{x}),\ \ \textup{for all $y$},
+\end{equation}
+is a monotonic function of $\mathbf{x}$. If higher values of $y$ are associated with higher values of $\mathbf{x}$, then this function should be non-increasing, for all $y$. If $P(Y\leq y\!\mid\!\mathbf{x})$ is a monotonic function of $x_{i}$, then its derivative with respect to $x_{i}$ is either non-negative or non-positive for all $x_{i}$.
+
+\section{Multinomial logistic regression}
+Let $z_{s}=1$ if $y=s$ and $z_{s}=0$ otherwise, for $s=1,\ldots,m$, then the conditional probability distribution of $Y$ given $\mathbf{x}$ can be written as
+\begin{equation}
+	P(Y=y\!\mid\!\vec{x})=P(Y=0\!\mid\!\vec{x})\prod_{s=1}^{m}\!\left\{\frac{P(Y=s\!\mid\!\vec{x})}{P(Y=0\!\mid\!\vec{x})}\right\}^{\!z_{s}},
+\end{equation}
+where
+\begin{equation}
+	P(Y=0\!\mid\!\vec{x})=\left\{1+\sum_{s=1}^{m}\frac{P(Y=s\!\mid\!\vec{x})}{P(Y=0\!\mid\!\vec{x})}\right\}^{\!-1}.
+\end{equation}
+In the multinomial logistic regression model,
+\begin{equation}
+	\frac{P(Y=s\!\mid\!\vec{x})}{P(Y=0\!\mid\!\vec{x})}=\textup{exp}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x}),\ \textup{for $s=1,\ldots,m$},
+\end{equation}
+where $\vec{\alpha}_{s}=(\alpha_{1s},\ldots,\alpha_{ks})'$, so that
+\begin{equation}
+	P(Y=y\!\mid\!\vec{x})=\frac{\textup{exp}\left\{\sum\limits_{s=1}^{m}z_{s}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x})\right\}}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x})}.
+\end{equation}
+It follows that
+\begin{equation}
+	P(Y\leq y\!\mid\!\vec{x})=\left\{\begin{array}{ll}\frac{1}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x})},&\textup{for $y=0$},\\
+		\rule{0cm}{1cm}\frac{1+\sum\limits_{s=1}^{y}\textup{exp}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x})}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\vec{\alpha}'_{s}\vec{x})},&\textup{for $y>0$}.
+	\end{array}\right.
+\end{equation}
+The multinomial logistic regression model has $(k+1)m$ parameters.
+
+\section{conditions for $\alpha$}
+In order to have the multinomial regression model satisfy the definition of ordinal regression, we require $P(Y \leq y \!\mid\! \vec{x})$ to be monotonic in $\vec{x}$. We will assume that higher values in $\vec{x}$ correspond to higher $y$. Furthermore, we treat both these statements are component wise.
+
+For monotonicity, we require:
+\begin{align*}
+	\frac{\partial P(Y \leq y | \vec{x})}{\partial x_i} \leq 0
+\end{align*}
+For every $i$ in every $\vec{x}$. For class $y = 0$, this ultimately gives:
+\begin{align*}
+	\sum_{s = 1}^{m} \alpha_{is} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x}) \geq 0
+\end{align*}
+This is satisfied if every $\alpha_{is} \geq 0$, but this may not be the strongest condition yet.
+
+Note to self: I still want to test if it is possible to have 1 particular $\alpha \leq 0$
+
+For clas $y > 0$, we find:
+\begin{align*}
+	(1 + \sum_{s = 1}^{m} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x}))(\sum_{s = 1}^{y} \alpha_{is} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x})) \\
+	- (1 + \sum_{s = 1}^{y} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x}))(\sum_{s = 1}^{m} \alpha_{is} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x})) \leq 0
+\end{align*}
+Which reduces back to the previous equation when $y = 0$, and is trivially satisfied when $y = m$. 
+
+\end{document}
