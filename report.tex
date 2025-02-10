@@ -86,7 +86,7 @@ For monotonicity, we require:
 \begin{align*}
 	\frac{\partial P(Y \leq y | \vec{x})}{\partial x_i} \leq 0
 \end{align*}
-For every $i$ in every $\vec{x}$. For class $y = 0$, this ultimately gives:
+For every $i$ and every $\vec{x}$. For class $y = 0$, this ultimately gives:
 \begin{align*}
 	\sum_{s = 1}^{m} \alpha_{is} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x}) \geq 0
 \end{align*}
@@ -100,5 +100,29 @@ For clas $y > 0$, we find:
 	- (1 + \sum_{s = 1}^{y} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x}))(\sum_{s = 1}^{m} \alpha_{is} \textup{exp} (\alpha_{0s} + \vec{\alpha_{s}}' \vec{x})) \leq 0
 \end{align*}
 Which reduces back to the previous equation when $y = 0$, and is trivially satisfied when $y = m$. 
+
+
+\section{Adjacent categories model}
+In this section we reparametrize the multinomial logistic regression model. In general we have:
+\begin{align*}
+	P(Y=y\!\mid\!\vec{x}) = P(Y=0\!\mid\!\vec{x}) \prod_{u = 1}^{y} \frac{P(Y=y\!\mid\!\vec{x})}{P(Y=y-1\!\mid\!\vec{x})}
+\end{align*}
+For $y = 1,\ldots,m$. In an adjacent categories model we assume
+\begin{align*}
+	\frac{P(Y=y\!\mid\!\vec{x})}{P(Y=y-1\!\mid\!\vec{x})} = \textup{exp}(\beta_{0u} + \vec{\beta_{u}}'\vec{x})
+\end{align*}
+Which can be seen as the probability of advancing from 1 category to the next (note that this requires an intrinsic ordering of the data i.e. ordinal data). Under these assumptions we find
+\begin{align*}
+	P(Y=y\!\mid\!\vec{x}) = P(Y=0\!\mid\!\vec{x}) \textup{exp}(\sum_{u = 1}^{y}[\beta_{0u} + \vec{\beta_{u}}'\vec{x}])
+\end{align*}
+By stating that $\vec{\beta}_{u}=(\beta_{1u},\ldots,\beta_{ku})'$, so that $\alpha_{0s}=\sum_{u=1}^{s}\beta_{0u}$ and $\vec{\alpha}_{s}=\sum_{u=1}^{s}\vec{\beta}_{u}$, we find
+\begin{align*}
+	P(Y=y\!\mid\!\vec{x})=\frac{\textup{exp}\!\left(\alpha_{0y}+y\vec{\beta}'\vec{x}\right)}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+s\vec{\beta}'\vec{x})}
+\end{align*}
+Which reduces to
+\begin{align*}
+	P(Y=y\!\mid\!\vec{x})=\frac{\textup{exp}\!\left(\alpha_{0y}+\vec{\alpha_y}'\vec{x}\right)}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+\vec{\alpha_s}'\vec{x})}
+\end{align*}
+by assuming the coefficients are independent of $s$ such that $\beta_{is}=\beta_{i}$, for $i=1,\ldots,k$ and all $s$, so that $\alpha_{is}=s\beta_{i}$.
 
 \end{document}

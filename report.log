@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.24 (MiKTeX 22.7) (preloaded format=pdflatex 2022.9.17)  10 FEB 2025 09:36
+This is pdfTeX, Version 3.141592653-2.6-1.40.24 (MiKTeX 22.7) (preloaded format=pdflatex 2022.9.17)  10 FEB 2025 13:58
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -523,18 +523,18 @@ Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 82.
 
-[2] (report.aux)
+[2] [3] (report.aux)
 Package rerunfilecheck Info: File `report.out' has not changed.
-(rerunfilecheck)             Checksum: 32D138C1E561EDB716F5EB4B6DA3E399;540.
+(rerunfilecheck)             Checksum: 47658ED21AC5147C0E30430A8B7265D6;714.
  ) 
 Here is how much of TeX's memory you used:
- 13483 strings out of 478338
- 215214 string characters out of 2836700
+ 13486 strings out of 478338
+ 215240 string characters out of 2836700
  526533 words of memory out of 3000000
- 31730 multiletter control sequences out of 15000+600000
+ 31731 multiletter control sequences out of 15000+600000
  480845 words of font info for 73 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 72i,12n,77p,439b,445s stack positions out of 10000i,1000n,20000p,200000b,80000s
+ 72i,12n,77p,439b,457s stack positions out of 10000i,1000n,20000p,200000b,80000s
 <C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/
 cmbx12.pfb><C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/type1/public/ams
 fonts/cm/cmex10.pfb><C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/type1/p
@@ -550,9 +550,9 @@ cmr8.pfb><C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfo
 nts/cm/cmsy10.pfb><C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/type1/pub
 lic/amsfonts/cm/cmsy6.pfb><C:/Users/fmeij/AppData/Local/Programs/MiKTeX/fonts/t
 ype1/public/amsfonts/cm/cmsy8.pfb>
-Output written on report.pdf (2 pages, 150590 bytes).
+Output written on report.pdf (3 pages, 156671 bytes).
 PDF statistics:
- 101 PDF objects out of 1000 (max. 8388607)
- 12 named destinations out of 1000 (max. 500000)
- 25 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 110 PDF objects out of 1000 (max. 8388607)
+ 14 named destinations out of 1000 (max. 500000)
+ 33 words of extra memory for PDF output out of 10000 (max. 10000000)
 
