@@ -115,6 +115,7 @@ Which can be seen as the probability of advancing from 1 category to the next (n
 \begin{align*}
 	P(Y=y\!\mid\!\vec{x}) = P(Y=0\!\mid\!\vec{x}) \textup{exp}(\sum_{u = 1}^{y}[\beta_{0u} + \vec{\beta_{u}}'\vec{x}])
 \end{align*}
+
 By stating that $\vec{\beta}_{u}=(\beta_{1u},\ldots,\beta_{ku})'$, so that $\alpha_{0s}=\sum_{u=1}^{s}\beta_{0u}$ and $\vec{\alpha}_{s}=\sum_{u=1}^{s}\vec{\beta}_{u}$, we find
 \begin{align*}
 	P(Y=y\!\mid\!\vec{x})=\frac{\textup{exp}\!\left(\alpha_{0y}+y\vec{\beta}'\vec{x}\right)}{1+\sum\limits_{s=1}^{m}\textup{exp}(\alpha_{0s}+s\vec{\beta}'\vec{x})}
