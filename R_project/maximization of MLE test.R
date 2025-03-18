@@ -75,6 +75,7 @@ b_0_pred = opt_result$par[4]
 b_1_pred = opt_result$par[5]^2 * opt_result$par[2]
 b_2_pred = opt_result$par[6]^2 * opt_result$par[3]
 
-
+#for simulation study: set up the above programm to setup sample size, #predictors and #classes beforehand. 
+#that way you can compare between models at different values.
 
 .
