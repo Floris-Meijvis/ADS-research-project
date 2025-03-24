@@ -1,0 +1,311 @@
+---
+title: "Data comparison markdown"
+author: "Floris Meijvis en co"
+date: "2025-03-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is he begin of the document
+
+```{r}
+# Load necessary libraries and set a seet
+library(nnet) #for multinomial logistic regression
+library(ggplot2) #for plots
+library(tidyverse)  #for pipe operators
+library(stats)
+
+set.seed(123) # For reproducibility
+```
+
+```{r}
+#setup of parameters
+N = 1000
+k = 5
+p = 3
+```
+
+
+```{r}
+#functions to use for data generation
+
+# Function to generate dataset according to multinom model
+# function is set up such that data is ordinal.
+generate_ordinal_multinomial_data <- function(N, k, p = 2) {
+  # N number of datapoints
+  # k number of classes
+  # p number of predictors
+  
+  # Generate predictor values X in [-1,1]
+  X = matrix(runif(N * p, -1, 1), ncol = p)
+  
+  # Generate random coefficients for the multinomial logit model
+  beta = matrix(rnorm((k - 1) * p), ncol = p)  # (k-1) x p coefficient matrix
+  beta_signs = sample(c(-1, 1), p, replace = TRUE) # Assign sign per predictor
+  
+  # Ensure same sign for each predictor across classes using a for-loop
+  for (j in 1:p) {
+    beta[, j] = beta_signs[j] * abs(beta[, j])
+  }
+  
+  # Generate intercept coefficients (alpha)
+  alpha = rnorm(k - 1) # Intercepts for (k-1) classes
+  
+  # Compute linear predictors for each class (excluding reference class)
+  eta = X %*% t(beta) + matrix(alpha, nrow = N, ncol = k - 1, byrow = TRUE) # N x (k-1)
+  
+  # Convert to probabilities using softmax transformation
+  exp_eta = exp(cbind(0, eta)) # Add reference class with zero logit
+  probs = exp_eta / rowSums(exp_eta) # Normalize
+  
+  # Sample class labels
+  y = apply(probs, 1, function(prob) sample(0:(k-1), 1, prob = prob))
+  
+  # Return dataset as a dataframe along with coefficients
+  data = data.frame(Y = as.factor(y), X)
+  colnames(data) = c("Y", paste("X", 1:p, sep = ""))
+  return(list(data = data, beta = beta, alpha = alpha))
+}
+
+generate_adjacent_categories_data = function(N, k, p = 2) {
+  # Generate predictor matrix X
+  X = matrix(runif(N * p, -1, 1), nrow = N, ncol = p)
+  
+  # Generate coefficients for each predictor (only one set of betas)
+  alpha = sort(runif(k - 1, -1, 1))  # Intercepts
+  beta = rnorm(p)  # Single set of regression coefficients for all categories
+  
+  # Compute cumulative log-odds
+  log_odds = matrix(NA, nrow = N, ncol = k - 1)
+  for (j in 1:(k - 1)) {
+    log_odds[, j] = alpha[j] + j * X %*% beta
+  }
+  
+  # Convert log odds to probabilities
+  probs = exp(log_odds)
+  probs = cbind(1, probs)  # Include baseline category (category 1)
+  probs = probs / rowSums(probs)  # Normalize to sum to 1
+  
+  # Generate categorical outcomes by sampling based on probabilities
+  Y = apply(probs, 1, function(p) sample(0:(k-1), size = 1, prob = p))
+  
+  # Return as a data frame
+  data = data.frame(Y = as.factor(Y), X)
+  colnames(data) = c("Y", paste("X", 1:p, sep = ""))
+  
+  return(list(data = data, beta = beta, alpha = alpha))
+}
+```
+
+```{r}
+#generating data
+
+#adjacent_categories dataset
+data_adjacent = generate_adjacent_categories_data(N, k, p)
+head(data_adjacent$data)
+data_adjacent$beta
+data_adjacent$alpha
+
+# multinomial dataset
+data_multinom = generate_ordinal_multinomial_data(N, k, p)
+head(data_multinom$data)
+data_multinom$beta
+data_multinom$alpha
+```
+
+```{r}
+#Fitting procedure
+logLikMultinom = function(par, data) {
+  #INPUT:
+  #par: flattened parameter matrix, see example below for correct creation
+  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  
+  # Extract dimensions
+  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
+  num_predictors = ncol(data) - 1  # Excluding response variable
+  
+  # Reconstruct matrix parameters from par vector
+  intercepts = par[1:num_classes]  # First few elements are intercepts
+  coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
+  
+  #ensures same sign for predictors
+  signs = sign(coefs[1,])  # Get sign of first row
+  for (i in 1:ncol(coefs)){
+    coefs[,i] = abs(coefs[,i]) * signs[i]
+  }
+  
+  # Extract variables
+  X = as.matrix(data[, -1])  # Convert to matrix
+  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
+  
+  # Compute the linear predictors for all classes
+  eta = sweep(X %*% t(coefs), 2, intercepts, "+")
+  
+  # Compute the sum of exponentials for the denominator
+  sumExp = rowSums(exp(eta)) + 1  # adding 1 for reference class Y=0
+  
+  loglik = numeric(length(Y))  #Initialize log-likelihood vector
+  
+  # Compute log-likelihood per observation
+  for (i in seq_along(Y)) {
+    if (Y[i] == 0) {
+      loglik[i] <- -log(sumExp[i])  # Reference class
+    } else {
+      loglik[i] <- eta[i, Y[i]] - log(sumExp[i])
+    }
+  }
+  
+  return(-sum(loglik))  # Negative log-likelihood for minimization
+}
+
+#example use
+params_multinom = c(data_multinom$alpha, data_multinom$beta)
+logLikMultinomtest = logLikMultinom(params_multinom, data_multinom$data)
+
+logLikAdjacent = function(par, data) {
+  #INPUT:
+  #par: flattened parameter matrix, see example below for correct creation
+  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  
+  # Extract dimensions
+  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
+  num_predictors = ncol(data) - 1  # Excluding response variable
+  
+  # Reconstruct matrix parameters from par vector
+  intercepts = par[1:num_classes]  # First few elements are intercepts
+  coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
+  
+  # Extract variables
+  X = as.matrix(data[, -1])  # Convert to matrix
+  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
+  
+  # Compute the linear predictors for all classes
+  eta = sweep(Y * X %*% t(coefs), 2, intercepts, "+")
+  
+  # Compute the sum of exponentials for the denominator
+  sumExp = rowSums(exp(eta)) + 1  # adding 1 for reference class Y=0
+  
+  loglik = numeric(length(Y))  #Initialize log-likelihood vector
+  
+  # Compute log-likelihood per observation
+  for (i in seq_along(Y)) {
+    if (Y[i] == 0) {
+      loglik[i] <- -log(sumExp[i])  # Reference class
+    } else {
+      loglik[i] <- eta[i, Y[i]] - log(sumExp[i])
+    }
+  }
+  
+  return(-sum(loglik))  # Negative log-likelihood for minimization
+}
+
+#example use
+params_adjacent = c(data_adjacent$alpha, data_adjacent$beta)
+logLikAdjacenttest = logLikAdjacent(params_adjacent, data_adjacent$data)
+```
+
+```{r}
+# Optimisation procedure for multinomial dataset on multinomial model
+
+#initial parameters, good guess is important
+initial_params = c(rep(data_multinom$alpha),  # Intercepts
+                   data_multinom$beta)   # Coefficients
+
+opt_result = optim(
+  par = initial_params,          # Flattened initial parameters
+  fn = logLikMultinom,           # Function to minimize
+  data = data_multinom$data,     # Pass the dataset separately
+  method = "BFGS"                # Optimization method
+)
+
+#Reconstruction of original datashape and coefficients
+optimized_params_multinom = opt_result$par
+optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
+optimized_coefs_multinom = matrix(optimized_params_multinom[k:length(optimized_params_multinom)], 
+                         nrow = k-1, 
+                         ncol = p)
+
+# Optimisation procedure for adjacent category dataset on multinomial model
+
+#initial parameters, good guess is important
+initial_params = c(rep(data_multinom$alpha),  # Intercepts
+                   data_multinom$beta)   # Coefficients
+
+opt_result = optim(
+  par = initial_params,          # Flattened initial parameters
+  fn = logLikMultinom,           # Function to minimize
+  data = data_adjacent$data,     # Pass the dataset separately
+  method = "BFGS"                # Optimization method
+)
+
+#Reconstruction of original datashape and coefficients
+optimized_params_adjacent = opt_result$par
+optimized_intercepts_adjacent = optimized_params_adjacent[1:(k-1)]
+optimized_coefs_adjacent = matrix(optimized_params_adjacent[k:length(optimized_params_adjacent)], 
+                         nrow = k-1, 
+                         ncol = p)
+
+#comparison of MLE's of adjacent and multinom dataset when applied to the multinomial model
+errorcoefs = abs(data_multinom$beta - optimized_coefs_adjacent)
+errorintercept = abs(data_multinom$alpha - optimized_intercepts_adjacent)
+error_adjacent = c(errorintercept, errorcoefs)
+print(paste0("average error in parameter estimates when fitting adjacentcategories dataset to multinom model:", mean(error_adjacent)))
+
+errorcoefs = abs(data_multinom$beta - optimized_coefs_multinom)
+errorintercept = abs(data_multinom$alpha - optimized_intercepts_multinom)
+error_multinom = c(errorintercept, errorcoefs)
+print(paste0("average error in parameter estimates when fitting multinomial dataset to multinom model:", mean(error_multinom)))
+```
+```{r}
+# Optimisation procedure for multinomial dataset on adjacent categories
+
+#initial parameters, good guess is important
+initial_params = c(rep(data_adjacent$alpha),  # Intercepts
+                   data_adjacent$beta)   # Coefficients
+
+opt_result = optim(
+  par = initial_params,          # Flattened initial parameters
+  fn = logLikAdjacent,           # Function to minimize
+  data = data_multinom$data,     # Pass the dataset separately
+  method = "BFGS"                # Optimization method
+)
+
+#Reconstruction of original datashape and coefficients
+optimized_params_multinom = opt_result$par
+optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
+optimized_coefs_multinom = optimized_params_multinom[k:length(optimized_params_multinom)]
+
+# Optimisation procedure for adjacent category dataset on multinomial model
+
+#initial parameters, good guess is important
+initial_params = c(rep(data_adjacent$alpha),  # Intercepts
+                   data_adjacent$beta)   # Coefficients
+
+opt_result = optim(
+  par = initial_params,          # Flattened initial parameters
+  fn = logLikAdjacent,           # Function to minimize
+  data = data_adjacent$data,     # Pass the dataset separately
+  method = "BFGS"                # Optimization method
+)
+
+#Reconstruction of original datashape and coefficients
+optimized_params_adjacent = opt_result$par
+optimized_intercepts_adjacent = optimized_params_adjacent[1:(k-1)]
+optimized_coefs_adjacent = optimized_params_adjacent[k:length(optimized_params_adjacent)]
+
+#comparison of MLE's of adjacent and multinom dataset when applied to the adjacentcategories model
+errorcoefs = abs(data_adjacent$beta - optimized_coefs_adjacent)
+errorintercept = abs(data_adjacent$alpha - optimized_intercepts_adjacent)
+error_adjacent = c(errorintercept, errorcoefs)
+print(paste0("average error in parameter estimates when fitting adjacentcategories dataset to adjacentcategories model:", mean(error_adjacent)))
+
+errorcoefs = abs(data_adjacent$beta - optimized_coefs_multinom)
+errorintercept = abs(data_adjacent$alpha - optimized_intercepts_multinom)
+error_multinom = c(errorintercept, errorcoefs)
+print(paste0("average error in parameter estimates when fitting multinomial dataset to adjacentcategories model:", mean(error_multinom)))
+```
+
+
