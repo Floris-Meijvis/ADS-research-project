@@ -18,12 +18,12 @@ library(ggplot2) #for plots
 library(tidyverse)  #for pipe operators
 library(stats)
 
-set.seed(123) # For reproducibility
+set.seed(1234) # For reproducibility
 ```
 
 ```{r}
 #setup of parameters
-N = 1000
+N = 100000
 k = 5
 p = 3
 ```
@@ -43,7 +43,7 @@ generate_ordinal_multinomial_data <- function(N, k, p = 2) {
   X = matrix(runif(N * p, -1, 1), ncol = p)
   
   # Generate random coefficients for the multinomial logit model
-  beta = matrix(rnorm((k - 1) * p), ncol = p)  # (k-1) x p coefficient matrix
+  beta = matrix(rnorm((k - 1) * p, mean = 0, sd = 1), ncol = p)  # (k-1) x p coefficient matrix
   beta_signs = sample(c(-1, 1), p, replace = TRUE) # Assign sign per predictor
   
   # Ensure same sign for each predictor across classes using a for-loop
@@ -70,13 +70,14 @@ generate_ordinal_multinomial_data <- function(N, k, p = 2) {
   return(list(data = data, beta = beta, alpha = alpha))
 }
 
+#function for generating data according to adjacent categories data
 generate_adjacent_categories_data = function(N, k, p = 2) {
   # Generate predictor matrix X
   X = matrix(runif(N * p, -1, 1), nrow = N, ncol = p)
   
   # Generate coefficients for each predictor (only one set of betas)
   alpha = sort(runif(k - 1, -1, 1))  # Intercepts
-  beta = rnorm(p)  # Single set of regression coefficients for all categories
+  beta = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for all categories
   
   # Compute cumulative log-odds
   log_odds = matrix(NA, nrow = N, ncol = k - 1)
@@ -117,7 +118,7 @@ data_multinom$alpha
 ```
 
 ```{r}
-#Fitting procedure
+#likelihood function and gradients
 logLikMultinom = function(par, data) {
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
@@ -161,11 +162,9 @@ logLikMultinom = function(par, data) {
   return(-sum(loglik))  # Negative log-likelihood for minimization
 }
 
-#example use
-params_multinom = c(data_multinom$alpha, data_multinom$beta)
-logLikMultinomtest = logLikMultinom(params_multinom, data_multinom$data)
-
-logLikAdjacent = function(par, data) {
+LogLikMultinomGrad = function(par, data){
+  #calculates the gradient wrt parameters for the LoglikMultinom function
+  
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
   #data: dataset to calculate likelihood for, first column should equal class and be called Y
@@ -182,21 +181,70 @@ logLikAdjacent = function(par, data) {
   X = as.matrix(data[, -1])  # Convert to matrix
   Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
   
-  # Compute the linear predictors for all classes
-  eta = sweep(Y * X %*% t(coefs), 2, intercepts, "+")
+  # Compute the nominator of probability for all non-reference class
+  nomprob = exp(sweep(X %*% t(coefs), 2, intercepts, "+"))
   
-  # Compute the sum of exponentials for the denominator
-  sumExp = rowSums(exp(eta)) + 1  # adding 1 for reference class Y=0
+  # Compute the denominator of probabilities
+  denomprob = rowSums(nomprob) + 1  # adding 1 for reference class Y=0
+  
+  ###subroutine for computing gradient wrt intercepts
+  #compute number of observations in each class
+  class_count = data %>% count(Y) %>% select(n)
+  class_count = class_count[-1,] #delete reference class count
+  
+  #compute sum of probabilities corresponding to classes
+  probs = numeric(num_classes)
+  for (i in 1:(num_classes)) {
+      probs[i] = sum(nomprob[,i]/denomprob)
+  }
+  
+  grad_intercept = class_count - probs
+  
+  ###subroutine for computing gradient wrt coeficients
+  grad_coefs = numeric((num_classes)*num_predictors)
+  for (i in 1:num_classes) {
+    for (j in 1:num_predictors) {
+      grad_coefs[j + (i-1)*num_predictors] = sum(X[,j]) - sum(X[,j] * nomprob[,i]/denomprob)
+    }
+  }
+  
+  return(c(grad_intercept, grad_coefs))
+}
+
+#example use
+params_multinom = c(data_multinom$alpha, data_multinom$beta)
+logLikMultinomtest = logLikMultinom(params_multinom, data_multinom$data)
+
+logLikAdjacent = function(par, data) {
+  #INPUT:
+  #par: flattened parameter matrix, see example below for correct creation
+  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  
+  # Extract dimensions
+  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
+  num_predictors = ncol(data) - 1  # Excluding response variable
+  
+  # Reconstruct matrix parameters from par vector
+  intercepts = par[1:num_classes]  # First few elements are intercepts
+  coefs = par[(num_classes + 1):length(par)]
+  
+  # Extract variables
+  X = as.matrix(data[, -1])  # Convert to matrix
+  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
+  
+  D = matrix(,nrow=length(Y),ncol=num_classes)
+  for (i in 1:length(Y)){for (j in 1:num_classes){if (Y[i]==j){D[i,j]=1} else {D[i,j]=0}}}
+
+  # Compute the linear predictors for all classes
+  eta = Y * X %*% coefs + D %*% intercepts 
+  ETA = matrix(rep(1:(k-1),length(Y)),nrow=length(Y),byrow=T) * c(X %*% coefs) + matrix(rep(intercepts,length(Y)),nrow=length(Y),byrow=T) 
+
+  sumExp = rowSums(exp(ETA)) + 1
   
   loglik = numeric(length(Y))  #Initialize log-likelihood vector
   
   # Compute log-likelihood per observation
-  for (i in seq_along(Y)) {
-    if (Y[i] == 0) {
-      loglik[i] <- -log(sumExp[i])  # Reference class
-    } else {
-      loglik[i] <- eta[i, Y[i]] - log(sumExp[i])
-    }
+  for (i in seq_along(Y)) { loglik[i]<-eta[i]-log(sumExp[i]) 
   }
   
   return(-sum(loglik))  # Negative log-likelihood for minimization
@@ -217,6 +265,7 @@ initial_params = c(rep(data_multinom$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikMultinom,           # Function to minimize
+  gr = LogLikMultinomGrad,      # gradient of Function
   data = data_multinom$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -237,6 +286,7 @@ initial_params = c(rep(data_multinom$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikMultinom,           # Function to minimize
+  gr = LogLikMultinomGrad,      # gradient of Function
   data = data_adjacent$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -259,6 +309,17 @@ errorintercept = abs(data_multinom$alpha - optimized_intercepts_multinom)
 error_multinom = c(errorintercept, errorcoefs)
 print(paste0("average error in parameter estimates when fitting multinomial dataset to multinom model:", mean(error_multinom)))
 ```
+Some heuristic testing has given:
+
+Without gradient function included:
+Multinomial error seems to decrease as N becomes larger, adjacent categories error seems to fluctuate
+increasing classes k increases both errors.
+increasing number of predictors p seems to not affect error in adjacent categories, but improve multinom error.
+
+
+With gradient function included:
+Errors are much lower than without gradient, but adjacent categories model seems to be better in most cases
+
 ```{r}
 # Optimisation procedure for multinomial dataset on adjacent categories
 
@@ -307,5 +368,14 @@ errorintercept = abs(data_adjacent$alpha - optimized_intercepts_multinom)
 error_multinom = c(errorintercept, errorcoefs)
 print(paste0("average error in parameter estimates when fitting multinomial dataset to adjacentcategories model:", mean(error_multinom)))
 ```
+Some heuristic testing tells us that:
+Relative error does not seem to increase as N increases
+increasing k does not seem to have a large effect, seems to slightly increase error of multinom fit (could be chance)
+increasing p increases both errors
 
+```{r}
+#testcel
+
+
+```
 
