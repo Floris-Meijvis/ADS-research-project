@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This is he begin of the document
+This is the begin of the document
 
 ```{r}
 # Load necessary libraries and set a seet
@@ -253,6 +253,60 @@ logLikAdjacent = function(par, data) {
 #example use
 params_adjacent = c(data_adjacent$alpha, data_adjacent$beta)
 logLikAdjacenttest = logLikAdjacent(params_adjacent, data_adjacent$data)
+
+LogLikAdjacentGrad = function(par, data){
+  #calculates the gradient wrt parameters for the LoglikMultinom function
+  
+  #INPUT:
+  #par: flattened parameter matrix, see example below for correct creation
+  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  
+  # Extract dimensions
+  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
+  num_predictors = ncol(data) - 1  # Excluding response variable
+  
+  # Reconstruct matrix parameters from par vector
+  intercepts = par[1:num_classes]  # First few elements are intercepts
+  coefs = par[(num_classes + 1):length(par)]
+  
+  # Extract variables
+  X = as.matrix(data[, -1])  # Convert to matrix
+  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
+  
+  D = matrix(,nrow=length(Y),ncol=num_classes)
+  for (i in 1:length(Y)){for (j in 1:num_classes){if (Y[i]==j){D[i,j]=1} else {D[i,j]=0}}}
+
+  # Compute the linear predictors for all classes (except reference class)
+  eta = Y * X %*% coefs + D %*% intercepts 
+  ETA = matrix(rep(1:(k-1),length(Y)),nrow=length(Y),byrow=T) * c(X %*% coefs) + matrix(rep(intercepts,length(Y)),nrow=length(Y),byrow=T) 
+
+  sumExp = rowSums(exp(ETA)) + 1
+  
+  ###subroutine for computing gradient wrt intercepts
+  #compute number of observations in each class
+  class_count = data %>% count(Y) %>% select(n)
+  class_count = class_count[-1,] #delete reference class count
+  
+  probs = numeric(num_classes)
+    for (i in 1:num_classes){
+      probs[i] = sum(exp(ETA[,i])/sumExp)
+    }
+  grad_intercept = class_count - probs
+  
+  ###subroutine for computing gradient wrt coeficients
+  grad_coefs = numeric(num_predictors)
+  
+  #help computes the second term per class
+  help = numeric(num_classes)
+  for (i in 1:num_predictors) {
+      for (j in num_classes){
+      help[j] = sum(j * X[,i] * exp(ETA[,j])/sumExp)
+    }
+    grad_coefs[i] = sum(Y*X[,i]) - sum(help)#THIS TERM IS A WIP.
+  }
+  
+  return(c(grad_intercept, grad_coefs))
+}
 ```
 
 ```{r}
@@ -265,7 +319,7 @@ initial_params = c(rep(data_multinom$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikMultinom,           # Function to minimize
-  gr = LogLikMultinomGrad,      # gradient of Function
+  gr = LogLikMultinomGrad,       # gradient of Function
   data = data_multinom$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -286,7 +340,7 @@ initial_params = c(rep(data_multinom$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikMultinom,           # Function to minimize
-  gr = LogLikMultinomGrad,      # gradient of Function
+  gr = LogLikMultinomGrad,       # gradient of Function
   data = data_adjacent$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -330,6 +384,7 @@ initial_params = c(rep(data_adjacent$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikAdjacent,           # Function to minimize
+  gr = LogLikAdjacentGrad,       # gradient of function to minimize
   data = data_multinom$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -348,6 +403,7 @@ initial_params = c(rep(data_adjacent$alpha),  # Intercepts
 opt_result = optim(
   par = initial_params,          # Flattened initial parameters
   fn = logLikAdjacent,           # Function to minimize
+  gr = LogLikAdjacentGrad,       # gradient of function to minimize
   data = data_adjacent$data,     # Pass the dataset separately
   method = "BFGS"                # Optimization method
 )
@@ -375,7 +431,5 @@ increasing p increases both errors
 
 ```{r}
 #testcel
-
-
 ```
 
