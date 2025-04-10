@@ -22,13 +22,6 @@ library(stats)
 set.seed(1234) # For reproducibility
 ```
 
-```{r}
-#setup of parameters
-N = 5000
-k = 5
-p = 2
-```
-
 
 ```{r}
 #functions to use for data generation
@@ -104,31 +97,15 @@ generate_adjacent_categories_data = function(N, k, p = 2) {
 ```
 
 ```{r}
-#generating data
-
-#adjacent_categories dataset
-data_adjacent = generate_adjacent_categories_data(N, k, p)
-head(data_adjacent$data)
-data_adjacent$beta
-data_adjacent$alpha
-
-# multinomial dataset
-data_multinom = generate_ordinal_multinomial_data(N, k, p)
-head(data_multinom$data)
-data_multinom$beta
-data_multinom$alpha
-```
-
-```{r}
 #likelihood function and gradients
-logLikMultinom = function(par, data) {
+logLikMultinom = function(par, data, k, p) {
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
   #data: dataset to calculate likelihood for, first column should equal class and be called Y
   
   # Extract dimensions
-  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
-  num_predictors = ncol(data) - 1  # Excluding response variable
+  num_classes = k - 1  # Excluding reference class
+  num_predictors = p
   
   # Reconstruct matrix parameters from par vector
   intercepts = par[1:num_classes]  # First few elements are intercepts
@@ -217,14 +194,14 @@ LogLikMultinomGrad = function(par, data){
 #params_multinom = c(data_multinom$alpha, data_multinom$beta)
 #logLikMultinomtest = logLikMultinom(params_multinom, data_multinom$data)
 
-logLikAdjacent = function(par, data) {
+logLikAdjacent = function(par, data, k, p) {
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
   #data: dataset to calculate likelihood for, first column should equal class and be called Y
   
   # Extract dimensions
-  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
-  num_predictors = ncol(data) - 1  # Excluding response variable
+  num_classes = k - 1  # Excluding reference class
+  num_predictors = p
   
   # Reconstruct matrix parameters from par vector
   intercepts = par[1:num_classes]  # First few elements are intercepts
@@ -312,131 +289,150 @@ LogLikAdjacentGrad = function(par, data){
 ```
 
 ```{r}
-# Optimisation procedure for multinomial dataset on multinomial model
+#setting up parameters and dataframe
 
-#initial parameters, good guess is important
-initial_params = c(rep(data_multinom$alpha),  # Intercepts
-                   data_multinom$beta)   # Coefficients
+#parameters to simulate over
+k = c(2,3, 4, 5)
+p = c(1,2, 3)
+N = c(30, 50, 100, 250, 500)#, 1000, 2500, 5000, 10000)
+Nsim = 10 #number of simulations to average over
 
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikMultinom,           # Function to minimize
-  #gr = LogLikMultinomGrad,       # gradient of Function
-  data = data_multinom$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
-)
+DataFrame = expand.grid(N = N, k = k, p = p)
 
-#Reconstruction of original datashape and coefficients
-optimized_params_multinom = opt_result$par
-optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
-optimized_coefs_multinom = matrix(optimized_params_multinom[k:length(optimized_params_multinom)], 
-                         nrow = k-1, 
-                         ncol = p)
-
-# Optimisation procedure for adjacent category dataset on multinomial model
-
-#initial parameters, good guess is important
-initial_params = c(rep(data_multinom$alpha),  # Intercepts
-                   data_multinom$beta)   # Coefficients
-
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikMultinom,           # Function to minimize
-  #gr = LogLikMultinomGrad,       # gradient of Function
-  data = data_adjacent$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
-)
-
-#Reconstruction of original datashape and coefficients
-optimized_params_adjacent = opt_result$par
-optimized_intercepts_adjacent = optimized_params_adjacent[1:(k-1)]
-optimized_coefs_adjacent = matrix(optimized_params_adjacent[k:length(optimized_params_adjacent)], 
-                         nrow = k-1, 
-                         ncol = p)
-
-#comparison of MLE's of adjacent and multinom dataset when applied to the multinomial model
-errorcoefs = abs(data_multinom$beta - optimized_coefs_adjacent)
-errorintercept = abs(data_multinom$alpha - optimized_intercepts_adjacent)
-error_adjacent = c(errorintercept, errorcoefs)
-print(paste0("average error in parameter estimates when fitting adjacentcategories dataset to multinom model:", mean(error_adjacent)))
-
-errorcoefs = abs(data_multinom$beta - optimized_coefs_multinom)
-errorintercept = abs(data_multinom$alpha - optimized_intercepts_multinom)
-error_multinom = c(errorintercept, errorcoefs)
-print(paste0("average error in parameter estimates when fitting multinomial dataset to multinom model:", mean(error_multinom)))
 ```
-Some heuristic testing has given:
-
-Without gradient function included:
-Multinomial error seems to decrease as N becomes larger, adjacent categories error seems to fluctuate
-increasing classes k increases both errors.
-increasing number of predictors p seems to not affect error in adjacent categories, but improve multinom error.
 
 
-With gradient function included:
-Errors are much lower than without gradient, even at ridiculously low sample sizes
+```{r} 
+#simulation functions for apply()
 
-```{r}
-# Optimisation procedure for multinomial dataset on adjacent categories
+SimulateAVGBias = function(row) {
+  k = row["k"]
+  p = row["p"]
+  N = row["N"]
+  
+  helpMtoM = rep(0, length = Nsim)
+  helpMtoA = rep(0, length = Nsim)
+  helpAtoM = rep(0, length = Nsim)
+  helpAtoA = rep(0, length = Nsim)
+  for (j in 1:Nsim) {#this subroutine performs Nsims for parameters in each row of the DataFrame
+    data_multinom = generate_ordinal_multinomial_data(N, k, p)
+    data_adjacent = generate_adjacent_categories_data(N, k, p)
+    
+    ###fitting multinom to multinom
+    initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
 
-#initial parameters, good guess is important
-initial_params = c(rep(data_adjacent$alpha),  # Intercepts
-                   data_adjacent$beta)   # Coefficients
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = logLikMultinom,           # Function to minimize
+      #gr = LogLikMultinomGrad,       # gradient of Function
+      k = k,
+      p = p,
+      data = data_multinom$data,     # Pass the dataset separately
+      method = "BFGS"                # Optimization method
+      )
 
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikAdjacent,           # Function to minimize
-  #gr = LogLikAdjacentGrad,       # gradient of function to minimize
-  data = data_multinom$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
-)
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                                nrow = k-1, 
+                                ncol = p)
+    #calculating average bias
+    errorcoefs = abs(data_multinom$beta - optimized_coefs)
+    errorintercept = abs(data_multinom$alpha - optimized_intercepts)
+    error = c(errorintercept, errorcoefs)
+    helpMtoM[j] = mean(error)
+    
+    ###fitting multinom to Adjacent
+    initial_params = c(data_adjacent$alpha, as.vector(data_adjacent$beta))
 
-#Reconstruction of original datashape and coefficients
-optimized_params_multinom = opt_result$par
-optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
-optimized_coefs_multinom = optimized_params_multinom[k:length(optimized_params_multinom)]
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = logLikAdjacent,           # Function to minimize
+      #gr = LogLikAdjacentGrad,       # gradient of Function
+      k = k,
+      p = p,
+      data = data_multinom$data,     # Pass the dataset separately
+      method = "BFGS"                # Optimization method
+      )
 
-# Optimisation procedure for adjacent category dataset on multinomial model
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                                nrow = k-1, 
+                                ncol = p)
+    #calculating average bias
+    errorcoefs = abs(data_adjacent$beta - optimized_coefs)
+    errorintercept = abs(data_adjacent$alpha - optimized_intercepts)
+    error = c(errorintercept, errorcoefs)
+    helpMtoA[j] = mean(error)
+    
+    ###fitting Adjacent to Multinom
+    initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
 
-#initial parameters, good guess is important
-initial_params = c(rep(data_adjacent$alpha),  # Intercepts
-                   data_adjacent$beta)   # Coefficients
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = logLikMultinom,           # Function to minimize
+      #gr = LogLikMultinomGrad,       # gradient of Function
+      k = k,
+      p = p,
+      data = data_adjacent$data,     # Pass the dataset separately
+      method = "BFGS"                # Optimization method
+      )
 
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikAdjacent,           # Function to minimize
-  #gr = LogLikAdjacentGrad,       # gradient of function to minimize
-  data = data_adjacent$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
-)
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                                nrow = k-1, 
+                                ncol = p)
+    #calculating average bias
+    errorcoefs = abs(data_multinom$beta - optimized_coefs)
+    errorintercept = abs(data_multinom$alpha - optimized_intercepts)
+    error = c(errorintercept, errorcoefs)
+    helpAtoM[j] = mean(error)
+    
+    ###fitting Adjacent to Adjacent
+    initial_params = c(data_adjacent$alpha, as.vector(data_adjacent$beta))
 
-#Reconstruction of original datashape and coefficients
-optimized_params_adjacent = opt_result$par
-optimized_intercepts_adjacent = optimized_params_adjacent[1:(k-1)]
-optimized_coefs_adjacent = optimized_params_adjacent[k:length(optimized_params_adjacent)]
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = logLikAdjacent,           # Function to minimize
+      #gr = LogLikAdjacentGrad,       # gradient of Function
+      k = k,
+      p = p,
+      data = data_adjacent$data,     # Pass the dataset separately
+      method = "BFGS"                # Optimization method
+      )
 
-#comparison of MLE's of adjacent and multinom dataset when applied to the adjacentcategories model
-errorcoefs = abs(data_adjacent$beta - optimized_coefs_adjacent)
-errorintercept = abs(data_adjacent$alpha - optimized_intercepts_adjacent)
-error_adjacent = c(errorintercept, errorcoefs)
-print(paste0("average error in parameter estimates when fitting adjacentcategories dataset to adjacentcategories model:", mean(error_adjacent)))
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                                nrow = k-1, 
+                                ncol = p)
+    #calculating average bias
+    errorcoefs = abs(data_adjacent$beta - optimized_coefs)
+    errorintercept = abs(data_adjacent$alpha - optimized_intercepts)
+    error = c(errorintercept, errorcoefs)
+    helpAtoA[j] = mean(error)
+  }
+  
+    return(c(mean(helpMtoM), mean(helpMtoA), mean(helpAtoM), mean(helpAtoA)))
+}
 
-errorcoefs = abs(data_adjacent$beta - optimized_coefs_multinom)
-errorintercept = abs(data_adjacent$alpha - optimized_intercepts_multinom)
-error_multinom = c(errorintercept, errorcoefs)
-print(paste0("average error in parameter estimates when fitting multinomial dataset to adjacentcategories model:", mean(error_multinom)))
+test = apply(DataFrame, 1, SimulateAVGBias)
+
+test = as.data.frame(t(test))
+colnames(test) = c("BiasMtoM", "biasMtoA", "BiasAtoM", "BiasAtoA")
+
+# Add new columns to the original data frame
+DataFrame = cbind(DataFrame, test)
 ```
-Some heuristic testing tells us that:
-Relative error does not seem to increase as N increases
-increasing k does not seem to have a large effect, seems to slightly increase error of multinom fit (could be chance)
-increasing p increases both errors
-
-
 
 
 Maybe consider using the constrOptim function from the stats library to put the constraints inside of the optimization procedure, and not inside of the likelihood.
 
 Gradient functions appear to not work properly, leave them out for now.
-
-
 
