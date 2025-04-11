@@ -18,6 +18,7 @@ library(ggplot2) #for plots
 library(tidyverse)  #for pipe operators
 library(tidyr)
 library(stats)
+library(dplyr)
 
 set.seed(1234) # For reproducibility
 ```
@@ -293,7 +294,7 @@ LogLikAdjacentGrad = function(par, data){
 
 #parameters to simulate over
 k = c(2,3, 4, 5)
-p = c(1,2, 3)
+p = c(1,2,3)
 N = c(30, 50, 100, 250, 500)#, 1000, 2500, 5000, 10000)
 Nsim = 10 #number of simulations to average over
 
@@ -425,11 +426,26 @@ SimulateAVGBias = function(row) {
 test = apply(DataFrame, 1, SimulateAVGBias)
 
 test = as.data.frame(t(test))
-colnames(test) = c("BiasMtoM", "biasMtoA", "BiasAtoM", "BiasAtoA")
+colnames(test) = c("BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA")
 
 # Add new columns to the original data frame
 DataFrame = cbind(DataFrame, test)
 ```
+
+```{r}
+#cel for plots
+
+DataFrame[DataFrame$k == 3 & DataFrame$p == 2,] %>%
+  ggplot(aes(x = N)) + 
+  geom_line(aes(y = BiasMtoM, color = 'BiasMtoM')) + 
+  geom_line(aes(y = BiasAtoM, color = 'BiasAtoM'))
+
+DataFrame[DataFrame$k == 3 & DataFrame$p == 2,] %>%
+  ggplot(aes(x = N)) + 
+  geom_line(aes(y = BiasMtoA, color = 'BiasMtoA')) + 
+  geom_line(aes(y = BiasAtoA, color = 'BiasAtoA'))
+```
+
 
 
 Maybe consider using the constrOptim function from the stats library to put the constraints inside of the optimization procedure, and not inside of the likelihood.
