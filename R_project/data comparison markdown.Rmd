@@ -18,6 +18,7 @@ library(ggplot2) #for plots
 library(tidyverse)  #for pipe operators
 library(tidyr)
 library(stats)
+library(nloptr) #for nonlinear optimisation problems
 
 set.seed(1234) # For reproducibility
 ```
@@ -79,12 +80,12 @@ generate_adjacent_categories_data = function(N, k, p = 2) {
   
   # Generate coefficients for each predictor (only one set of betas)
   alpha = sort(runif(k - 1, -1, 1))  # Intercepts
-  beta = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for all categories
+  beta = matrix(rnorm(p, mean = 0, sd = 1), ncol = p)  # Single set of regression coefficients for all categories
   
   # Compute cumulative log-odds
   log_odds = matrix(NA, nrow = N, ncol = k - 1)
   for (j in 1:(k - 1)) {
-    log_odds[, j] = alpha[j] + j * X %*% beta
+    log_odds[, j] = alpha[j] + j * X %*% t(beta)
   }
   
   # Convert log odds to probabilities
@@ -135,10 +136,10 @@ logLikMultinom = function(par, data) {
   coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
   
   #ensures same sign for predictors
-  signs = sign(as.numeric(coefs[1, , drop = FALSE]))  # Get sign of first row
-  for (i in 1:ncol(coefs)){
-    coefs[,i] = abs(coefs[,i]) * signs[i]
-  }
+  #signs = sign(as.numeric(coefs[1, , drop = FALSE]))  # Get sign of first row
+  #for (i in 1:ncol(coefs)){
+  #  coefs[,i] = abs(coefs[,i]) * signs[i]
+  #}
   
   # Extract variables
   X = as.matrix(data[, -1])  # Convert to matrix
@@ -312,22 +313,38 @@ LogLikAdjacentGrad = function(par, data){
 ```
 
 ```{r}
+Ineq_enforcer_multinom2 = function(par, data) {
+  #function to provide to nloptr routine. ensures same sign constraint
+  coefs = matrix(par[k:length(par)], 
+                         nrow = k-1, 
+                         ncol = p)
+  output = c()
+  for (i in 1:ncol(coefs)) {
+    output[i] = max(coefs[,i]) * min(coefs[,i])
+  }
+  return(output)
+}
+
 # Optimisation procedure for multinomial dataset on multinomial model
 
 #initial parameters, good guess is important
 initial_params = c(rep(data_multinom$alpha),  # Intercepts
                    data_multinom$beta)   # Coefficients
+initial_params = initial_params+ rnorm(length(initial_params)) #add some random noise
 
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikMultinom,           # Function to minimize
-  #gr = LogLikMultinomGrad,       # gradient of Function
-  data = data_multinom$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
+obj_fn = function(params) logLikMultinom(params, data_multinom$data)
+constr_fn = function(params) Ineq_enforcer_multinom2(params, data_multinom$data)
+
+opt_result = nloptr(
+  x0 = initial_params,
+  eval_f = obj_fn,
+  eval_g_ineq = constr_fn,
+  opts = list("algorithm"="NLOPT_LN_COBYLA",
+       "xtol_rel"=1.0e-8),
 )
 
 #Reconstruction of original datashape and coefficients
-optimized_params_multinom = opt_result$par
+optimized_params_multinom = opt_result$solution
 optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
 optimized_coefs_multinom = matrix(optimized_params_multinom[k:length(optimized_params_multinom)], 
                          nrow = k-1, 
@@ -338,17 +355,21 @@ optimized_coefs_multinom = matrix(optimized_params_multinom[k:length(optimized_p
 #initial parameters, good guess is important
 initial_params = c(rep(data_multinom$alpha),  # Intercepts
                    data_multinom$beta)   # Coefficients
+initial_params = initial_params+ rnorm(length(initial_params)) #add some random noise
 
-opt_result = optim(
-  par = initial_params,          # Flattened initial parameters
-  fn = logLikMultinom,           # Function to minimize
-  #gr = LogLikMultinomGrad,       # gradient of Function
-  data = data_adjacent$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
+obj_fn = function(params) logLikMultinom(params, data_adjacent$data)
+constr_fn = function(params) Ineq_enforcer_multinom2(params, data_adjacent$data)
+
+opt_result = nloptr(
+  x0 = initial_params,
+  eval_f = obj_fn,
+  eval_g_ineq = constr_fn,
+  opts = list("algorithm"="NLOPT_LN_COBYLA",
+       "xtol_rel"=1.0e-8),
 )
 
 #Reconstruction of original datashape and coefficients
-optimized_params_adjacent = opt_result$par
+optimized_params_adjacent = opt_result$solution
 optimized_intercepts_adjacent = optimized_params_adjacent[1:(k-1)]
 optimized_coefs_adjacent = matrix(optimized_params_adjacent[k:length(optimized_params_adjacent)], 
                          nrow = k-1, 
@@ -388,7 +409,8 @@ opt_result = optim(
   fn = logLikAdjacent,           # Function to minimize
   #gr = LogLikAdjacentGrad,       # gradient of function to minimize
   data = data_multinom$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
+  method = "BFGS",                # Optimization method
+  control = (abstol = 1e-6)
 )
 
 #Reconstruction of original datashape and coefficients
@@ -407,7 +429,8 @@ opt_result = optim(
   fn = logLikAdjacent,           # Function to minimize
   #gr = LogLikAdjacentGrad,       # gradient of function to minimize
   data = data_adjacent$data,     # Pass the dataset separately
-  method = "BFGS"                # Optimization method
+  method = "BFGS",                # Optimization method
+  control = (abstol = 1e-6)
 )
 
 #Reconstruction of original datashape and coefficients
@@ -434,9 +457,13 @@ increasing p increases both errors
 
 
 
+
+
 Maybe consider using the constrOptim function from the stats library to put the constraints inside of the optimization procedure, and not inside of the likelihood.
 
 Gradient functions appear to not work properly, leave them out for now.
+ -> for adjacent categories: problem lies in coefficients, not intercepts.
+ -> multinomial gradient has problems in both intercepts and coefficients.
 
 
 

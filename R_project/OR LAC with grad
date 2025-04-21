@@ -1,0 +1,53 @@
+
+set.seed(5)
+n<-10000
+x<-rnorm(n)
+m<-2 # m+1 categories
+
+a01<-3
+a02<-2
+b<-2
+
+p0<-1/(1+exp(a01+1*b*x)+exp(a02+2*b*x))
+p1<-exp(a01+1*b*x)/(1+exp(a01+1*b*x)+exp(a02+2*b*x))
+p2<-exp(a02+2*b*x)/(1+exp(a01+1*b*x)+exp(a02+2*b*x))
+P<-cbind(p0,p1,p2)
+
+# check stochastic ordering
+sd<-cbind(x,p0,p0+p1,p0+p1+p2)[order(x),]
+plot(sd[,1],sd[,2],type='l')
+plot(sd[,1],sd[,3],type='l')
+plot(sd[,1],sd[,4],type='l')
+
+y<-c()
+for (i in 1:n){y[i]<-sample(0:m,size=1,replace=T,prob=P[i,])}
+
+# starting values
+sa01<-1 # y[1]
+sa02<-1 # y[2]
+sb<-1 # y[3]
+
+Z<-matrix(,nrow=n,ncol=m)
+for (i in 1:n){for (j in 1:2){if (y[i]==j){Z[i,j]<-1} else {Z[i,j]<-0}}}
+
+ns<-colSums(Z)
+d<-sum(y*x)
+
+# log likelihood function
+logl<-function(y){-ns%*%c(y[1],y[2])-d*y[3]+sum(log(1+exp(y[1]+1*y[3]*x)+exp(y[2]+2*y[3]*x)))}
+
+dla01<-function(y){-ns[1]+sum(exp(y[1]+1*y[3]*x)/(1+exp(y[1]+1*y[3]*x)+exp(y[2]+2*y[3]*x)))}
+dla02<-function(y){-ns[2]+sum(exp(y[2]+2*y[3]*x)/(1+exp(y[1]+1*y[3]*x)+exp(y[2]+2*y[3]*x)))}
+dlb<-function(y){-d+sum(x*(1*exp(y[1]+1*y[3]*x)+2*exp(y[2]+2*y[3]*x))/(1+exp(y[1]+1*y[3]*x)+exp(y[2]+2*y[3]*x)))}
+
+der<-function(y){c(dla01(y),dla02(y),dlb(y))}
+
+sv<-c(sa01,sa02,sb)
+
+fit<-optim(sv,logl,der,
+      method="BFGS",
+      lower=-Inf,upper=Inf,control=list(trace=TRUE,reltol=1e-80,abstol=1e-80,maxit=1000),hessian=TRUE)
+fit
+der(fit$par)
+
+cbind(fit$par,sqrt(diag(solve(fit$hessian))))

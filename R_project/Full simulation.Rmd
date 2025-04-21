@@ -19,13 +19,14 @@ library(tidyverse)  #for pipe operators
 library(tidyr)
 library(stats)
 library(dplyr)
+library(nloptr) #for nonlinear optimisation problems
 
 set.seed(1234) # For reproducibility
 ``` 
 
 ```{r}
 #sets up Sim_Results file headers
-write.table( t(c("N", "k", "p", "BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA")), file = "Sim_Results", append = FALSE, row.names = F, col.names = F)
+write.table( t(c("N", "k", "p", "BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA", "stdMtoM", "stdMtoA", "stdAtoM", "stdAtoA")), file = "Sim_Results", append = FALSE, row.names = F, col.names = F)
 ```
 
 
@@ -118,10 +119,10 @@ logLikMultinom = function(par, data, k, p) {
   coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
   
   #ensures same sign for predictors
-  signs = sign(as.numeric(coefs[1, , drop = FALSE]))  # Get sign of first row
-  for (i in 1:ncol(coefs)){
-    coefs[,i] = abs(coefs[,i]) * signs[i]
-  }
+  #signs = sign(as.numeric(coefs[1, , drop = FALSE]))  # Get sign of first row
+  #for (i in 1:ncol(coefs)){
+  #  coefs[,i] = abs(coefs[,i]) * signs[i]
+  #}
   
   # Extract variables
   X = as.matrix(data[, -1])  # Convert to matrix
@@ -292,15 +293,27 @@ LogLikAdjacentGrad = function(par, data){
   
   return(c(grad_intercept, grad_coefs))
 }
+
+Ineq_enforcer_multinom = function(par, data, k, p) {
+  #function to provide to nloptr routine. ensures same sign constraint
+  coefs = matrix(par[k:length(par)], 
+                         nrow = k-1, 
+                         ncol = p)
+  output = c()
+  for (i in 1:ncol(coefs)) {
+    output[i] = max(coefs[,i]) * min(coefs[,i])
+  }
+  return(output)
+}
 ```
 
 ```{r}
 #setting up parameters and dataframe
 
 #parameters to simulate over
-k = c(2,3, 4, 5)
-p = c(1,2,3)
-N = c(500, 1000, 2500)   #c(30, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
+k = c(2,3, 4, 5)   #classes
+p = c(1,2,3)  #predictors
+N = c(30, 50, 100, 250, 500, 1000, 2500)  #datapoints #c(30, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
 Nsim = 100 #number of simulations to average over
 
 DataFrame = expand.grid(N = N, k = k, p = p)
@@ -312,7 +325,7 @@ SimulateAVGBias = function(row) {
   N = row["N"]
   
   #helps us keep track of where we are in the simulation
-  print(k)
+  print(c(k, p, N))
   
   helpMtoM = rep(0, length = Nsim)
   helpMtoA = rep(0, length = Nsim)
@@ -325,18 +338,19 @@ SimulateAVGBias = function(row) {
     ###fitting multinom to multinom
     initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
 
-    opt_result = optim(
-      par = initial_params,          # Flattened initial parameters
-      fn = logLikMultinom,           # Function to minimize
-      #gr = LogLikMultinomGrad,       # gradient of Function
-      k = k,
-      p = p,
-      data = data_multinom$data,     # Pass the dataset separately
-      method = "BFGS"                # Optimization method
+    obj_fn = function(params) logLikMultinom(params, data_multinom$data, k, p)
+    constr_fn = function(params) Ineq_enforcer_multinom(params, data_multinom$data, k, p)
+
+    opt_result = nloptr(
+      x0 = initial_params,
+      eval_f = obj_fn,
+      eval_g_ineq = constr_fn,
+      opts = list("algorithm"="NLOPT_LN_COBYLA",
+       "xtol_rel"=1.0e-8),
       )
 
     #Reconstruction of original datashape and coefficients
-    optimized_params = opt_result$par
+    optimized_params = opt_result$solution
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
                                 nrow = k-1, 
@@ -375,18 +389,19 @@ SimulateAVGBias = function(row) {
     ###fitting Adjacent to Multinom
     initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
 
-    opt_result = optim(
-      par = initial_params,          # Flattened initial parameters
-      fn = logLikMultinom,           # Function to minimize
-      #gr = LogLikMultinomGrad,       # gradient of Function
-      k = k,
-      p = p,
-      data = data_adjacent$data,     # Pass the dataset separately
-      method = "BFGS"                # Optimization method
-      )
+    obj_fn = function(params) logLikMultinom(params, data_adjacent$data, k, p)
+    constr_fn = function(params) Ineq_enforcer_multinom(params, data_adjacent$data, k, p)
+
+    opt_result = nloptr(
+      x0 = initial_params,
+      eval_f = obj_fn,
+      eval_g_ineq = constr_fn,
+      opts = list("algorithm"="NLOPT_LN_COBYLA",
+       "xtol_rel"=1.0e-8),
+    )
 
     #Reconstruction of original datashape and coefficients
-    optimized_params = opt_result$par
+    optimized_params = opt_result$solution
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
                                 nrow = k-1, 
@@ -422,14 +437,21 @@ SimulateAVGBias = function(row) {
     error = c(errorintercept, errorcoefs)
     helpAtoA[j] = mean(error)
   }
-  
-    return(c(mean(helpMtoM), mean(helpMtoA), mean(helpAtoM), mean(helpAtoA)))
+  output = c(mean(helpMtoM), 
+             mean(helpMtoA), 
+             mean(helpAtoM), 
+             mean(helpAtoA), 
+             sqrt(var(helpMtoM)), 
+             sqrt(var(helpMtoA)), 
+             sqrt(var(helpAtoM)), 
+             sqrt(var(helpAtoA)))
+    return(output)
 }
 
 test = apply(DataFrame, 1, SimulateAVGBias)
 
 test = as.data.frame(t(test))
-colnames(test) = c("BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA")
+colnames(test) = c("BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA", "stdMtoM", "stdMtoA", "stdAtoM", "stdAtoA")
 
 # Add new columns to the original data frame
 DataFrame = cbind(DataFrame, test)
@@ -441,20 +463,34 @@ write.table(DataFrame, file = "Sim_Results", append = TRUE, row.names = F, col.n
 #cel for plots
 Data = read.table("Sim_Results", header = TRUE)
 
-Data[Data$k == 3 & Data$p == 2,] %>%
+Data%>%
   ggplot(aes(x = N)) + 
-  geom_line(aes(y = BiasMtoM, color = 'BiasMtoM')) + 
-  geom_line(aes(y = BiasAtoM, color = 'BiasAtoM'))
-
-Data[Data$k == 3 & Data$p == 2,] %>%
+  geom_point(aes(y = BiasMtoM, color = 'BiasMtoM')) + 
+  geom_point(aes(y = BiasAtoM, color = 'BiasAtoM')) + 
+  geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'BiasMtoM')) + 
+  geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'BiasAtoM')) + 
+  facet_grid(rows = vars(k), cols = vars(p)) + 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1))
+  
+Data %>%
   ggplot(aes(x = N)) + 
-  geom_line(aes(y = BiasMtoA, color = 'BiasMtoA')) + 
-  geom_line(aes(y = BiasAtoA, color = 'BiasAtoA'))
+  geom_point(aes(y = BiasMtoA, color = 'BiasMtoA')) + 
+  geom_point(aes(y = BiasAtoA, color = 'BiasAtoA')) + 
+  geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'BiasMtoA')) + 
+  geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'BiasAtoA')) + 
+  facet_grid(rows = vars(k), cols = vars(p)) + 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1))
 ```
 
 
 
 Maybe consider using the constrOptim function from the stats library to put the constraints inside of the optimization procedure, and not inside of the likelihood.
 
+sample coefficients outside of the generate_data functions and see if this affects anything!
+
 Gradient functions appear to not work properly, leave them out for now.
+
+- compute and plot expected values of bias in the above plots
+
+
 
