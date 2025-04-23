@@ -12,14 +12,15 @@ knitr::opts_chunk$set(echo = TRUE)
 This is the begin of the document
 
 ```{r}
-# Load necessary libraries and set a seed
+# Load necessary libraries and set a seet
 library(nnet) #for multinomial logistic regression
 library(ggplot2) #for plots
 library(tidyverse)  #for pipe operators
 library(tidyr)
 library(stats)
-library(dplyr)
 library(nloptr) #for nonlinear optimisation problems
+library(dplyr)
+library(numDeriv) #for numeric derivatives
 
 set.seed(1234) # For reproducibility
 ``` 
@@ -105,7 +106,7 @@ generate_adjacent_categories_data = function(N, k, p = 2) {
 
 ```{r}
 #likelihood function and gradients
-logLikMultinom = function(par, data, k, p) {
+LogLikMultinom = function(par, data, k, p) {
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
   #data: dataset to calculate likelihood for, first column should equal class and be called Y
@@ -117,12 +118,6 @@ logLikMultinom = function(par, data, k, p) {
   # Reconstruct matrix parameters from par vector
   intercepts = par[1:num_classes]  # First few elements are intercepts
   coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
-  
-  #ensures same sign for predictors
-  #signs = sign(as.numeric(coefs[1, , drop = FALSE]))  # Get sign of first row
-  #for (i in 1:ncol(coefs)){
-  #  coefs[,i] = abs(coefs[,i]) * signs[i]
-  #}
   
   # Extract variables
   X = as.matrix(data[, -1])  # Convert to matrix
@@ -148,60 +143,46 @@ logLikMultinom = function(par, data, k, p) {
   return(-sum(loglik))  # Negative log-likelihood for minimization
 }
 
-LogLikMultinomGrad = function(par, data){
-  #calculates the gradient wrt parameters for the LoglikMultinom function
+LogLikMultinomGrad = function(par, data, k, p) {
   
-  #INPUT:
-  #par: flattened parameter matrix, see example below for correct creation
-  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  num_classes = k - 1 #number of non-reference classes
+  num_predictors = p
   
-  # Extract dimensions
-  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
-  num_predictors = ncol(data) - 1  # Excluding response variable
-  
-  # Reconstruct matrix parameters from par vector
-  intercepts = par[1:num_classes]  # First few elements are intercepts
+  intercepts = par[1:num_classes]
   coefs = matrix(par[(num_classes + 1):length(par)], nrow = num_classes, ncol = num_predictors)
   
-  # Extract variables
-  X = as.matrix(data[, -1])  # Convert to matrix
-  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
+  X = as.matrix(data[, -1])
+  Y = as.integer(data$Y) - 1
   
-  # Compute the nominator of probability for all non-reference class
-  nomprob = exp(sweep(X %*% t(coefs), 2, intercepts, "+"))
+  eta = sweep(X %*% t(coefs), 2, intercepts, "+")
+  # Compute the sum of exponentials for the denominator
+  sumExp = rowSums(exp(eta)) + 1  # adding 1 for reference class Y=0
   
-  # Compute the denominator of probabilities
-  denomprob = rowSums(nomprob) + 1  # adding 1 for reference class Y=0
+  probs = exp(eta) / sumExp  # N x K matrix
   
-  ###subroutine for computing gradient wrt intercepts
-  #compute number of observations in each class
-  class_count = data %>% count(Y) %>% select(n)
-  class_count = class_count[-1,] #delete reference class count
-  
-  #compute sum of probabilities corresponding to classes
-  probs = numeric(num_classes)
-  for (i in 1:(num_classes)) {
-      probs[i] = sum(nomprob[,i]/denomprob)
-  }
-  
-  grad_intercept = class_count - probs
-  
-  ###subroutine for computing gradient wrt coeficients
-  grad_coefs = numeric((num_classes)*num_predictors)
-  for (i in 1:num_classes) {
-    for (j in 1:num_predictors) {
-      grad_coefs[j + (i-1)*num_predictors] = sum(X[,j]) - sum(X[,j] * nomprob[,i]/denomprob)
+  # Indicator matrix for observed Y
+  N = nrow(data)
+  ind = matrix(0, nrow = N, ncol = num_classes)
+  for (i in 1:N) {
+    if (Y[i] > 0) {
+      ind[i, Y[i]] = 1
     }
   }
   
-  return(c(grad_intercept, grad_coefs))
+  diff = ind - probs  # N x K
+  
+  # Gradient for intercepts
+  grad_intercepts = -colSums(diff)
+  
+  # Gradient for coefficients
+  grad_coefs = -t(diff) %*% X  # K x p matrix
+  
+  # Flatten gradient into vector
+  grad = c(grad_intercepts, as.vector(grad_coefs))
+  return(grad)
 }
 
-#example use
-#params_multinom = c(data_multinom$alpha, data_multinom$beta)
-#logLikMultinomtest = logLikMultinom(params_multinom, data_multinom$data)
-
-logLikAdjacent = function(par, data, k, p) {
+LogLikAdjacent = function(par, data, k, p) {
   #INPUT:
   #par: flattened parameter matrix, see example below for correct creation
   #data: dataset to calculate likelihood for, first column should equal class and be called Y
@@ -236,63 +217,48 @@ logLikAdjacent = function(par, data, k, p) {
   return(-sum(loglik))  # Negative log-likelihood for minimization
 }
 
-#example use
-#params_adjacent = c(data_adjacent$alpha, data_adjacent$beta)
-#logLikAdjacenttest = logLikAdjacent(params_adjacent, data_adjacent$data)
-
-LogLikAdjacentGrad = function(par, data){
-  #calculates the gradient wrt parameters for the LoglikMultinom function
+LogLikAdjacentGrad <- function(par, data, k, p) {
+  # Unpack dimensions
+  num_classes <- k - 1
+  num_predictors <- p
   
-  #INPUT:
-  #par: flattened parameter matrix, see example below for correct creation
-  #data: dataset to calculate likelihood for, first column should equal class and be called Y
+  # Reconstruct parameters
+  intercepts <- par[1:num_classes]
+  coefs <- par[(num_classes + 1):length(par)]
   
-  # Extract dimensions
-  num_classes = length(unique(data$Y)) - 1  # Excluding reference class
-  num_predictors = ncol(data) - 1  # Excluding response variable
+  # Prepare data
+  X <- as.matrix(data[, -1])
+  Y <- as.integer(data$Y) - 1
+  n <- nrow(X)
   
-  # Reconstruct matrix parameters from par vector
-  intercepts = par[1:num_classes]  # First few elements are intercepts
-  coefs = par[(num_classes + 1):length(par)]
-  
-  # Extract variables
-  X = as.matrix(data[, -1])  # Convert to matrix
-  Y = as.integer(data$Y) - 1  # Convert factor to integer (-1 to align indices)
-  
-  D = matrix(,nrow=length(Y),ncol=num_classes)
-  for (i in 1:length(Y)){for (j in 1:num_classes){if (Y[i]==j){D[i,j]=1} else {D[i,j]=0}}}
-
-  # Compute the linear predictors for all classes (except reference class)
-  eta = Y * X %*% coefs + D %*% intercepts 
-  ETA = matrix(rep(1:(k-1),length(Y)),nrow=length(Y),byrow=T) * c(X %*% coefs) + matrix(rep(intercepts,length(Y)),nrow=length(Y),byrow=T) 
-
-  sumExp = rowSums(exp(ETA)) + 1
-  
-  ###subroutine for computing gradient wrt intercepts
-  #compute number of observations in each class
-  class_count = data %>% count(Y) %>% select(n)
-  class_count = class_count[-1,] #delete reference class count
-  
-  probs = numeric(num_classes)
-    for (i in 1:num_classes){
-      probs[i] = sum(exp(ETA[,i])/sumExp)
-    }
-  grad_intercept = class_count - probs
-  
-  ###subroutine for computing gradient wrt coeficients
-  grad_coefs = numeric(num_predictors)
-  
-  #help computes the second term per class
-  help = numeric(num_classes)
-  for (i in 1:num_predictors) {
-      for (j in num_classes){
-      help[j] = sum(j * X[,i] * exp(ETA[,j])/sumExp)
-    }
-    grad_coefs[i] = sum(Y*X[,i]) - sum(help)#THIS TERM IS A WIP.
+  # Compute ETA matrix
+  linear_part <- X %*% coefs
+  ETA <- matrix(0, n, num_classes)
+  for (j in 1:num_classes) {
+    ETA[, j] <- intercepts[j] + j * linear_part
   }
   
-  return(c(grad_intercept, grad_coefs))
+  expETA <- exp(ETA)
+  denom <- rowSums(expETA) + 1
+  P <- expETA / denom  # n x num_classes
+  
+  # Gradient for intercepts
+  grad_alpha <- numeric(num_classes)
+  for (j in 1:num_classes) {
+    grad_alpha[j] <- sum((Y == j) - P[, j])
+  }
+  
+  # Gradient for coefficients
+  grad_beta <- numeric(num_predictors)
+  for (l in 1:num_predictors) {
+    x_l <- X[, l]
+    weighted_sum <- rowSums(sweep(P, 2, 1:num_classes, FUN = "*")) * x_l
+    grad_beta[l] <- sum(Y * x_l - weighted_sum)
+  }
+  
+  return(-c(grad_alpha, grad_beta))  # Negative gradient for minimization
 }
+
 
 Ineq_enforcer_multinom = function(par, data, k, p) {
   #function to provide to nloptr routine. ensures same sign constraint
@@ -301,7 +267,7 @@ Ineq_enforcer_multinom = function(par, data, k, p) {
                          ncol = p)
   output = c()
   for (i in 1:ncol(coefs)) {
-    output[i] = max(coefs[,i]) * min(coefs[,i])
+    output[i] = -1 * max(coefs[,i]) * min(coefs[,i]) #for nloptr need to remain in \leq 0 region
   }
   return(output)
 }
@@ -336,25 +302,34 @@ SimulateAVGBias = function(row) {
     data_adjacent = generate_adjacent_categories_data(N, k, p)
     
     ###fitting multinom to multinom
-    initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
+    initial_params = c(rep(data_multinom$alpha),  # Intercepts
+                   as.vector(data_multinom$beta))   # Coefficients
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
 
-    obj_fn = function(params) logLikMultinom(params, data_multinom$data, k, p)
+    #wrapper functions
+    obj_fn = function(params) LogLikMultinom(params, data_multinom$data, k, p)
     constr_fn = function(params) Ineq_enforcer_multinom(params, data_multinom$data, k, p)
+    grad_obj_fn = function(params) LogLikMultinomGrad(params, data_multinom$data, k, p)
+    grad_constr_fn = function(par) {jacobian(constr_fn, par)}
 
     opt_result = nloptr(
       x0 = initial_params,
-      eval_f = obj_fn,
-      eval_g_ineq = constr_fn,
-      opts = list("algorithm"="NLOPT_LN_COBYLA",
-       "xtol_rel"=1.0e-8),
-      )
+      eval_f = obj_fn, #objective function
+      eval_grad_f = grad_obj_fn, #gradient of objective function
+      eval_g_ineq = constr_fn, # constraint
+      eval_jac_g_ineq = grad_constr_fn, #gradient of constraint
+      opts = list("algorithm"="NLOPT_LD_MMA",
+                  "xtol_rel"=1.0e-8,
+                  "maxeval" = 1000)
+                  )
 
     #Reconstruction of original datashape and coefficients
     optimized_params = opt_result$solution
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
-                                nrow = k-1, 
-                                ncol = p)
+                         nrow = k-1, 
+                         ncol = p)
+    
     #calculating average bias
     errorcoefs = abs(data_multinom$beta - optimized_coefs)
     errorintercept = abs(data_multinom$alpha - optimized_intercepts)
@@ -366,11 +341,11 @@ SimulateAVGBias = function(row) {
 
     opt_result = optim(
       par = initial_params,          # Flattened initial parameters
-      fn = logLikAdjacent,           # Function to minimize
-      #gr = LogLikAdjacentGrad,       # gradient of Function
+      fn = LogLikAdjacent,           # Function to minimize
+      gr = LogLikAdjacentGrad,       # gradient of Function
+      data = data_multinom$data,     # Pass the dataset separately
       k = k,
       p = p,
-      data = data_multinom$data,     # Pass the dataset separately
       method = "BFGS"                # Optimization method
       )
 
@@ -387,25 +362,33 @@ SimulateAVGBias = function(row) {
     helpMtoA[j] = mean(error)
     
     ###fitting Adjacent to Multinom
-    initial_params = c(data_multinom$alpha, as.vector(data_multinom$beta))
+    initial_params = c(rep(data_multinom$alpha),  # Intercepts
+                   as.vector(data_multinom$beta))   # Coefficients
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
 
-    obj_fn = function(params) logLikMultinom(params, data_adjacent$data, k, p)
+    obj_fn = function(params) LogLikMultinom(params, data_adjacent$data, k, p)
     constr_fn = function(params) Ineq_enforcer_multinom(params, data_adjacent$data, k, p)
+    grad_obj_fn = function(params) LogLikMultinomGrad(params, data_adjacent$data, k, p)
+    grad_constr_fn = function(par) {jacobian(constr_fn, par)}
 
     opt_result = nloptr(
       x0 = initial_params,
-      eval_f = obj_fn,
-      eval_g_ineq = constr_fn,
-      opts = list("algorithm"="NLOPT_LN_COBYLA",
-       "xtol_rel"=1.0e-8),
-    )
+      eval_f = obj_fn, #objective function
+      eval_grad_f = grad_obj_fn, #gradient of objective function
+      eval_g_ineq = constr_fn, # constraint
+      eval_jac_g_ineq = grad_constr_fn, #gradient of constraint
+      opts = list("algorithm"="NLOPT_LD_MMA",
+                  "xtol_rel"=1.0e-8,
+                  "maxeval" = 1000)
+                  )
 
     #Reconstruction of original datashape and coefficients
     optimized_params = opt_result$solution
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
-                                nrow = k-1, 
-                                ncol = p)
+                         nrow = k-1, 
+                         ncol = p)
+    
     #calculating average bias
     errorcoefs = abs(data_multinom$beta - optimized_coefs)
     errorintercept = abs(data_multinom$alpha - optimized_intercepts)
@@ -417,11 +400,11 @@ SimulateAVGBias = function(row) {
 
     opt_result = optim(
       par = initial_params,          # Flattened initial parameters
-      fn = logLikAdjacent,           # Function to minimize
-      #gr = LogLikAdjacentGrad,       # gradient of Function
+      fn = LogLikAdjacent,           # Function to minimize
+      gr = LogLikAdjacentGrad,       # gradient of Function
+      data = data_adjacent$data,     # Pass the dataset separately
       k = k,
       p = p,
-      data = data_adjacent$data,     # Pass the dataset separately
       method = "BFGS"                # Optimization method
       )
 
@@ -463,7 +446,7 @@ write.table(DataFrame, file = "Sim_Results", append = TRUE, row.names = F, col.n
 #cel for plots
 Data = read.table("Sim_Results", header = TRUE)
 
-Data%>%
+Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoM, color = 'BiasMtoM')) + 
   geom_point(aes(y = BiasAtoM, color = 'BiasAtoM')) + 
@@ -472,7 +455,7 @@ Data%>%
   facet_grid(rows = vars(k), cols = vars(p)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1))
   
-Data %>%
+Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoA, color = 'BiasMtoA')) + 
   geom_point(aes(y = BiasAtoA, color = 'BiasAtoA')) + 
@@ -483,14 +466,15 @@ Data %>%
 ```
 
 
-
-Maybe consider using the constrOptim function from the stats library to put the constraints inside of the optimization procedure, and not inside of the likelihood.
-
 sample coefficients outside of the generate_data functions and see if this affects anything!
 
 Gradient functions appear to not work properly, leave them out for now.
 
 - compute and plot expected values of bias in the above plots
+
+- compute variance and std of every parameter individually. gives an idea of efficiency
+
+- investigate why std's sometimes increase as dataset grows larger
 
 
 
