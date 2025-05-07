@@ -27,36 +27,40 @@ seed = 1234 # For reproducibility, set.seed is called inside of the simulation f
 
 ```{r}
 #sets up Sim_Results file headers
-write.table( t(c("N", "k", "p", "BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA", "stdMtoM", "stdMtoA", "stdAtoM", "stdAtoA")), file = "Sim_Results", append = FALSE, row.names = F, col.names = F)
+write.table( t(c("N", "k", "p", "BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA", "stdMtoM", "stdMtoA", "stdAtoM", "stdAtoA")), file = "Sim_ResultsV2", append = FALSE, row.names = F, col.names = F)
 ```
 
 
 ```{r}
 #functions to use for data generation
 
-# Function to generate dataset according to multinom model
-# function is set up such that data is ordinal.
-generate_ordinal_multinomial_data = function(N, k, p = 2) {
+N = 2500  
+p = 3
+k = 5
+
+# Generate parameters for O.M. model
+beta_M = matrix(rnorm((k - 1) * p, mean = 0, sd = 1), ncol = p)  # (k-1) x p coefficient matrix
+beta_signs = sample(c(-1, 1), p, replace = TRUE) # Assign sign per predictor
+  
+# Ensure same sign for each predictor across classes using a for-loop
+for (j in 1:p) {
+  beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
+  }
+  
+# Generate intercept coefficients (alpha)
+alpha_M = rnorm(k - 1) # Intercepts for (k-1) classes
+  
+generate_ordinal_multinomial_data = function(N, k, p, alpha, beta) {
   # N number of datapoints
   # k number of classes
   # p number of predictors
+  # alpha intercepts
+  # beta coefficient matrix
   
   # Generate predictor values X in [-1,1]
   X = matrix(runif(N * p, -1, 1), ncol = p)
   #X = matrix(sample(c(0,1), N, replace = TRUE), ncol = 1)
-  
-  # Generate random coefficients for the multinomial logit model
-  beta = matrix(rnorm((k - 1) * p, mean = 0, sd = 1), ncol = p)  # (k-1) x p coefficient matrix
-  beta_signs = sample(c(-1, 1), p, replace = TRUE) # Assign sign per predictor
-  
-  # Ensure same sign for each predictor across classes using a for-loop
-  for (j in 1:p) {
-    beta[, j] = beta_signs[j] * abs(beta[, j])
-  }
-  
-  # Generate intercept coefficients (alpha)
-  alpha = rnorm(k - 1) # Intercepts for (k-1) classes
-  
+
   # Compute linear predictors for each class (excluding reference class)
   eta = X %*% t(beta) + matrix(alpha, nrow = N, ncol = k - 1, byrow = TRUE) # N x (k-1)
   
@@ -73,14 +77,17 @@ generate_ordinal_multinomial_data = function(N, k, p = 2) {
   return(list(data = data, beta = beta, alpha = alpha))#(list(X,probs,y))
 }
 
+test = generate_ordinal_multinomial_data(N, k, p, alpha_M, beta_M)
+
+
+# generate parameters of A. C. model
+alpha_A = sort(runif(k - 1, -1, 1))  # Intercepts
+beta_A = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for all categories
+  
 #function for generating data according to adjacent categories data
-generate_adjacent_categories_data = function(N, k, p = 2) {
+generate_adjacent_categories_data = function(N, k, p, alpha, beta) {
   # Generate predictor matrix X
   X = matrix(runif(N * p, -1, 1), nrow = N, ncol = p)
-  
-  # Generate coefficients for each predictor (only one set of betas)
-  alpha = sort(runif(k - 1, -1, 1))  # Intercepts
-  beta = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for all categories
   
   # Compute cumulative log-odds
   log_odds = matrix(NA, nrow = N, ncol = k - 1)
@@ -102,6 +109,8 @@ generate_adjacent_categories_data = function(N, k, p = 2) {
   
   return(list(data = data, beta = beta, alpha = alpha))
 }
+
+test = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
 ```
 
 ```{r}
@@ -294,13 +303,24 @@ SimulateAVGBias = function(row) {
   #helps us keep track of where we are in the simulation
   print(c(k, p, N))
   
+  #generates coefficients for data generation
+  beta_M = matrix(rnorm((k - 1) * p, mean = 0, sd = 1), ncol = p)
+  beta_signs = sample(c(-1, 1), p, replace = TRUE)
+  for (j in 1:p) {
+    beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
+    }
+  alpha_M = rnorm(k - 1)
+  alpha_A = sort(runif(k - 1, -1, 1)) 
+  
+  beta_A = rnorm(p, mean = 0, sd = 1)
+  
   helpMtoM = rep(0, length = Nsim)
   helpMtoA = rep(0, length = Nsim)
   helpAtoM = rep(0, length = Nsim)
   helpAtoA = rep(0, length = Nsim)
   for (j in 1:Nsim) {#this subroutine performs Nsims for parameters in each row of the DataFrame
-    data_multinom = generate_ordinal_multinomial_data(N, k, p)
-    data_adjacent = generate_adjacent_categories_data(N, k, p)
+    data_multinom = generate_ordinal_multinomial_data(N, k, p, alpha_M, beta_M)
+    data_adjacent = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
     
     ###fitting multinom to multinom
     initial_params = c(rep(data_multinom$alpha),  # Intercepts
@@ -442,7 +462,7 @@ colnames(test) = c("BiasMtoM", "BiasMtoA", "BiasAtoM", "BiasAtoA", "stdMtoM", "s
 # Add new columns to the original data frame
 DataFrame = cbind(DataFrame, test)
 
-write.table(DataFrame, file = "Sim_Results", append = TRUE, row.names = F, col.names = F) #append set to true to allow us to "chop up" the parameter space we want to test into several runs
+write.table(DataFrame, file = "Sim_ResultsV2", append = TRUE, row.names = F, col.names = F) #append set to true to allow us to "chop up" the parameter space we want to test into several runs
 ```
 
 ```{r}
@@ -577,11 +597,13 @@ sample coefficients outside of the generate_data functions and see if this affec
 
 - compute and plot expected values of bias in the above plots
 
+- compute variance and std of every parameter individually. gives an idea of efficiency
+
 - investigate why bias sometimes increase as dataset grows larger, maybe check if this is because of Non-convergence! cannot be caused by gradient.
 
 - is there a difference in bias between categories?
 
-- Update simulation to only vary the sample size, not change the parameters of the models that generate it.
+- Update simulation to only vary the Sample size, not change the parameters of the models that generate it.
 
 
 
