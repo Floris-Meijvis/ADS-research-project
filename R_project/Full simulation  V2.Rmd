@@ -479,7 +479,8 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting to Ordinal Multinomial Model") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")
+  xlab("N, # datapoints") + 
+  ylim(0,2)
   
 Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
@@ -491,7 +492,8 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting to Adjacent Categories Model") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")
+  xlab("N, # datapoints") + 
+  ylim(0,2)
 
 Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
@@ -503,7 +505,8 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting Ordinal Multinomial data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")
+  xlab("N, # datapoints") + 
+  ylim(0,2)
 
 Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
@@ -515,7 +518,8 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting Adjacent categories data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")
+  xlab("N, # datapoints") + 
+  ylim(0,2)
 
 Data %>% filter(N > 30) %>%
   ggplot(aes(x = N)) + 
@@ -527,7 +531,8 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "model effectiveness comparison") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")
+  xlab("N, # datapoints") + 
+  ylim(0,2)
 ```
 
 ```{r}
