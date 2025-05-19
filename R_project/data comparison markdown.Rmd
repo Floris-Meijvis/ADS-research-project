@@ -412,7 +412,7 @@ optimized_params_multinom = opt_result$par
 optimized_intercepts_multinom = optimized_params_multinom[1:(k-1)]
 optimized_coefs_multinom = optimized_params_multinom[k:length(optimized_params_multinom)]
 
-# Optimisation procedure for adjacent category dataset on multinomial model
+# Optimisation procedure for adjacent category dataset on adjacentcategories model
 
 #initial parameters, good guess is important
 initial_params = c(rep(data_adjacent$alpha),  # Intercepts

@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 This is the begin of the document
 
 ```{r}
-# Load necessary libraries and set a seet
+# Load necessary libraries and set a seed
 library(nnet) #for multinomial logistic regression
 library(ggplot2) #for plots
 library(tidyverse)  #for pipe operators
@@ -21,6 +21,7 @@ library(stats)
 library(nloptr) #for nonlinear optimisation problems
 library(dplyr)
 library(numDeriv) #for numeric derivatives
+library(caret)
 
 seed = 1234 # For reproducibility, set.seed is called inside of the simulation functions
 ``` 
@@ -77,10 +78,7 @@ generate_ordinal_multinomial_data = function(N, k, p, alpha, beta) {
   return(list(data = data, beta = beta, alpha = alpha))#(list(X,probs,y))
 }
 
-test = generate_ordinal_multinomial_data(N, k, p, alpha_M, beta_M)
-
-
-# generate parameters of A. C. model
+# generate parameters of A.C. model
 alpha_A = sort(runif(k - 1, -1, 1))  # Intercepts
 beta_A = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for all categories
   
@@ -109,8 +107,6 @@ generate_adjacent_categories_data = function(N, k, p, alpha, beta) {
   
   return(list(data = data, beta = beta, alpha = alpha))
 }
-
-test = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
 ```
 
 ```{r}
@@ -374,9 +370,8 @@ SimulateAVGBias = function(row) {
     #Reconstruction of original datashape and coefficients
     optimized_params = opt_result$par
     optimized_intercepts = optimized_params[1:(k-1)]
-    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
-                                nrow = k-1, 
-                                ncol = p)
+    optimized_coefs = optimized_params[k:length(optimized_params)]
+    
     #calculating average bias
     errorcoefs = abs(data_adjacent$beta - optimized_coefs)
     errorintercept = abs(data_adjacent$alpha - optimized_intercepts)
@@ -434,9 +429,8 @@ SimulateAVGBias = function(row) {
     #Reconstruction of original datashape and coefficients
     optimized_params = opt_result$par
     optimized_intercepts = optimized_params[1:(k-1)]
-    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
-                                nrow = k-1, 
-                                ncol = p)
+    optimized_coefs = optimized_params[k:length(optimized_params)]
+    
     #calculating average bias
     errorcoefs = abs(data_adjacent$beta - optimized_coefs)
     errorintercept = abs(data_adjacent$alpha - optimized_intercepts)
@@ -540,11 +534,21 @@ Data %>% filter(N > 30) %>%
 simulate_efficiency = function(N,k,p, Nsim) {
   set.seed(seed)
   
+  beta_M = matrix(rnorm((k - 1) * p, mean = 0, sd = 1), ncol = p)
+  beta_signs = sample(c(-1, 1), p, replace = TRUE)
+  for (j in 1:p) {
+    beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
+    }
+  alpha_M = rnorm(k - 1)
+  alpha_A = sort(runif(k - 1, -1, 1)) 
+  
+  beta_A = rnorm(p, mean = 0, sd = 1)
+  
   df_MtoM = c() 
   
   for (j in 1:Nsim) {
-    data_multinom = generate_ordinal_multinomial_data(N, k, p)
-    data_adjacent = generate_adjacent_categories_data(N, k, p)
+    data_multinom = generate_ordinal_multinomial_data(N, k, p, alpha_M, beta_M)
+    data_adjacent = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
     
     ###fitting multinom to multinom
     initial_params = c(rep(data_multinom$alpha),  # Intercepts
@@ -595,10 +599,205 @@ for (n in N) {
 #Show that this decreases as N -> infty
 ```
 
+!!!!! 
+TURNS OUT that the way you sample your coefficients can massively impact predictive performance, sampling from standard normal results in lower accuracy compared to sampling from from N(5,25) distribution, as its less likely that 1 class dominates.
+!!!!!
+
+```{r}
+#predictive performance test: confusion matrices
+#Should be run N_sim times to average out RNG
+N = 500
+k = 4
+p = 2
+set.seed(seed)
+
+beta_M = matrix(rnorm((k - 1) * p, mean = 5, sd = 5), ncol = p)
+beta_signs = sample(c(-1, 1), p, replace = TRUE)
+for (j in 1:p) {
+  beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
+  }
+alpha_M = rnorm(k - 1, mean = 5, sd = 5)
+alpha_A = sort(runif(k - 1, -3, 3)) 
+beta_A = rnorm(p, mean = 5, sd = 5)
+
+Estimate_OM_class = function(N, k, p, alpha, beta, X){
+  # N number of datapoints
+  # k number of classes
+  # p number of predictors
+  # alpha intercepts
+  # beta coefficient matrix
+
+  # Compute linear predictors for each class (excluding reference class)
+  eta = X %*% t(beta) + matrix(alpha, nrow = N, ncol = k - 1, byrow = TRUE) # N x (k-1)
+  
+  # Convert to probabilities using softmax transformation
+  exp_eta = exp(cbind(0, eta)) # Add reference class with zero logit
+  probs = exp_eta / rowSums(exp_eta) # Normalize
+ 
+  #find which class has highest probability and return that class number
+  classes = c()
+  for (i in (1:N)){
+    
+    classes[i] = which.max(probs[i,]) - 1 #-1 for reference class
+  }
+  
+  return(classes)
+}
+
+Estimate_AC_class = function(N, k, p, alpha, beta, X){
+  # N number of datapoints
+  # k number of classes
+  # p number of predictors
+  # alpha intercepts
+  # beta coefficient matrix
+
+  # Compute cumulative log-odds
+  log_odds = matrix(NA, nrow = N, ncol = k - 1)
+  for (j in 1:(k - 1)) {
+    log_odds[, j] = alpha[j] + j * as.matrix(X) %*% beta
+  }
+  
+  # Convert log odds to probabilities
+  probs = exp(log_odds)
+  probs = cbind(1, probs)  # Include baseline category (category 1)
+  probs = probs / rowSums(probs)  # Normalize to sum to 1
+  
+  #find which class has highest probability and return that class number
+  classes = c()
+  for (i in (1:N)){
+    classes[i] = which.max(probs[i,]) - 1 #-1 for reference class
+  }
+  
+  return(classes)
+}
+
+Data_M = generate_ordinal_multinomial_data(N,k,p,alpha_M,beta_M)
+Data_A = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
+
+###fitting multinom to multinom
+    initial_params = c(rep(Data_M$alpha),  # Intercepts
+                   as.vector(Data_M$beta))   # Coefficients
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
+
+    #wrapper functions
+    obj_fn = function(params) LogLikMultinom(params, Data_M$data, k, p)
+    constr_fn = function(params) Ineq_enforcer_multinom(params, Data_M$data, k, p)
+    grad_obj_fn = function(params) LogLikMultinomGrad(params, Data_M$data, k, p)
+    grad_constr_fn = function(par) {jacobian(constr_fn, par)}
+
+    opt_result = nloptr(
+      x0 = initial_params,
+      eval_f = obj_fn, #objective function
+      eval_grad_f = grad_obj_fn, #gradient of objective function
+      eval_g_ineq = constr_fn, # constraint
+      eval_jac_g_ineq = grad_constr_fn, #gradient of constraint
+      opts = list("algorithm"="NLOPT_LD_MMA",
+                  "xtol_rel"=1.0e-8,
+                  "maxeval" = 10000)
+                  )
+
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$solution
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                         nrow = k-1, 
+                         ncol = p)
+
+True_class = Data_M$data$Y
+Pred_class = as.factor(Estimate_OM_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_M$data[,-1])))
+ConfMatrixMtoM = confusionMatrix(True_class, Pred_class)
+
+###fitting AC to Multinom
+    initial_params = c(rep(Data_M$alpha),  # Intercepts
+                   as.vector(Data_M$beta))   # Coefficients
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
+
+    #wrapper functions
+    obj_fn = function(params) LogLikMultinom(params, Data_A$data, k, p)
+    constr_fn = function(params) Ineq_enforcer_multinom(params, Data_A$data, k, p)
+    grad_obj_fn = function(params) LogLikMultinomGrad(params, Data_A$data, k, p)
+    grad_constr_fn = function(par) {jacobian(constr_fn, par)}
+
+    opt_result = nloptr(
+      x0 = initial_params,
+      eval_f = obj_fn, #objective function
+      eval_grad_f = grad_obj_fn, #gradient of objective function
+      eval_g_ineq = constr_fn, # constraint
+      eval_jac_g_ineq = grad_constr_fn, #gradient of constraint
+      opts = list("algorithm"="NLOPT_LD_MMA",
+                  "xtol_rel"=1.0e-8,
+                  "maxeval" = 10000)
+                  )
+
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$solution
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = matrix(optimized_params[k:length(optimized_params)], 
+                         nrow = k-1, 
+                         ncol = p)
+
+True_class = Data_A$data$Y
+Pred_class = factor(Estimate_OM_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_M$data[,-1])), levels = 0:(k-1))
+ConfMatrixAtoM = confusionMatrix(True_class, Pred_class)
+    
+    
+###fitting multinom to Adjacent
+    initial_params = c(Data_A$alpha, as.vector(Data_A$beta))
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
+
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = LogLikAdjacent,           # Function to minimize
+      gr = LogLikAdjacentGrad,       # gradient of Function
+      data = Data_M$data,     # Pass the dataset separately
+      k = k,
+      p = p,
+      method = "BFGS"                # Optimization method
+      )
+
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = optimized_params[k:length(optimized_params)]
+    
+True_class = Data_M$data$Y
+Pred_class = factor(Estimate_AC_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_A$data[,-1])), levels = 0:(k-1))
+ConfMatrixMtoA = confusionMatrix(True_class, Pred_class)
+    
+
+    ###fitting Adjacent to Adjacent
+    initial_params = c(Data_A$alpha, as.vector(Data_A$beta))
+    initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
+
+    opt_result = optim(
+      par = initial_params,          # Flattened initial parameters
+      fn = LogLikAdjacent,           # Function to minimize
+      gr = LogLikAdjacentGrad,       # gradient of Function
+      data = Data_A$data,     # Pass the dataset separately
+      k = k,
+      p = p,
+      method = "BFGS"                # Optimization method
+      )
+
+    #Reconstruction of original datashape and coefficients
+    optimized_params = opt_result$par
+    optimized_intercepts = optimized_params[1:(k-1)]
+    optimized_coefs = optimized_params[k:length(optimized_params)]
+    
+True_class = Data_A$data$Y
+Pred_class = factor(Estimate_AC_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_A$data[,-1])), levels = 0:(k-1))
+ConfMatrixAtoA = confusionMatrix(True_class, Pred_class)
+    
+    
+```
 
 
 
-sample coefficients outside of the generate_data functions and see if this affects anything!
+
+
+
+
+
 
 - compute and plot expected values of bias in the above plots
 
@@ -607,8 +806,6 @@ sample coefficients outside of the generate_data functions and see if this affec
 - investigate why bias sometimes increase as dataset grows larger, maybe check if this is because of Non-convergence! cannot be caused by gradient.
 
 - is there a difference in bias between categories?
-
-- Update simulation to only vary the Sample size, not change the parameters of the models that generate it.
 
 
 
