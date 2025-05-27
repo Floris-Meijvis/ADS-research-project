@@ -59,7 +59,7 @@ generate_ordinal_multinomial_data = function(N, k, p, alpha, beta) {
   # beta coefficient matrix
   
   # Generate predictor values X in [-1,1]
-  X = matrix(runif(N * p, -1, 1), ncol = p)
+  X = matrix(runif(N * p, -2, 2), ncol = p)
   #X = matrix(sample(c(0,1), N, replace = TRUE), ncol = 1)
 
   # Compute linear predictors for each class (excluding reference class)
@@ -85,7 +85,7 @@ beta_A = rnorm(p, mean = 0, sd = 1)  # Single set of regression coefficients for
 #function for generating data according to adjacent categories data
 generate_adjacent_categories_data = function(N, k, p, alpha, beta) {
   # Generate predictor matrix X
-  X = matrix(runif(N * p, -1, 1), nrow = N, ncol = p)
+  X = matrix(runif(N * p, -2, 2), nrow = N, ncol = p)
   
   # Compute cumulative log-odds
   log_odds = matrix(NA, nrow = N, ncol = k - 1)
@@ -461,61 +461,61 @@ write.table(DataFrame, file = "Sim_ResultsV2", append = TRUE, row.names = F, col
 
 ```{r}
 #cel for plots
-Data = read.table("Sim_Results", header = TRUE)
+Data = read.table("Sim_ResultsV2", header = TRUE)
 
-Data %>% filter(N > 30) %>%
+Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoM, color = 'Ord. Mult. data')) + 
   geom_point(aes(y = BiasAtoM, color = 'Adj. cat. data')) + 
-  geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. data')) +
-  geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Adj. cat. data')) + 
+  #geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. data')) +
+  #geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Adj. cat. data')) + 
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting to Ordinal Multinomial Model") + 
   ylab("Bias") + 
   xlab("N, # datapoints") + 
-  ylim(0,2)
+  scale_y_log10()
   
-Data %>% filter(N > 30) %>%
+Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoA, color = 'Ord. Mult. data')) + 
   geom_point(aes(y = BiasAtoA, color = 'Adj. cat. data')) + 
-  geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Ord. Mult. data')) +
-  geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. data')) + 
+  #geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Ord. Mult. data')) +
+  #geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. data')) + 
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting to Adjacent Categories Model") + 
   ylab("Bias") + 
-  xlab("N, # datapoints") + 
-  ylim(0,2)
+  xlab("N, # datapoints")+ 
+  scale_y_log10()
 
-Data %>% filter(N > 30) %>%
+Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoM, color = 'Ord. Mult. model')) + 
   geom_point(aes(y = BiasMtoA, color = 'Adj. cat. model')) + 
-  geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. model'))+
-  geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Adj. cat. model')) +
+  #geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. model'))+
+  #geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Adj. cat. model')) +
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting Ordinal Multinomial data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints") + 
-  ylim(0,2)
+  xlab("N, # datapoints")+ 
+  scale_y_log10()
 
-Data %>% filter(N > 30) %>%
+Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasAtoM, color = 'Ord. Mult. model')) + 
   geom_point(aes(y = BiasAtoA, color = 'Adj. cat. model')) + 
-  geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Ord. Mult. model'))+
-  geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. model')) +
+  #geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Ord. Mult. model'))+
+  #geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. model')) +
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "Average Bias across all parameters when fitting Adjacent categories data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints") + 
-  ylim(0,2)
+  xlab("N, # datapoints")+ 
+  scale_y_log10()
 
-Data %>% filter(N > 30) %>%
+Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasAtoM, color = 'AtoM')) + 
   geom_point(aes(y = BiasMtoA, color = 'MtoA')) + 
@@ -525,10 +525,9 @@ Data %>% filter(N > 30) %>%
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "model effectiveness comparison") + 
   ylab("Bias") + 
-  xlab("N, # datapoints") + 
-  ylim(0,2)
+  xlab("N, # datapoints")+ 
+  scale_y_log10()
 ```
-idea: turn this into a 3d plot for a better overview
 
 ```{r}
 #WIP, cel for estimating efficiency
@@ -606,20 +605,19 @@ TURNS OUT that the way you sample your coefficients can massively impact predict
 
 ```{r}
 #predictive performance test: confusion matrices
-#Should be run N_sim times to average out RNG, and check for bugs
-N = 1000
-k = 4
-p = 2
-set.seed(seed+1)
+N = 150
+k = 3
+p = 3
+set.seed(seed)
 
-beta_M = matrix(rnorm((k - 1) * p, mean = 3, sd = 2), ncol = p)
+beta_M = matrix(rnorm((k - 1) * p, mean = 2, sd = 2), ncol = p)
 beta_signs = sample(c(-1, 1), p, replace = TRUE)
 for (j in 1:p) {
   beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
   }
-alpha_M = rnorm(k - 1, mean = 1, sd = 2)
-alpha_A = sort(rnorm(k - 1, mean = 1, sd = 2)) 
-beta_A = rnorm(p, mean = 3, sd = 2)
+alpha_M = rnorm(k - 1, mean = 2, sd = 2)
+alpha_A = sort(rnorm(k - 1, mean = 2, sd = 2)) 
+beta_A = rnorm(p, mean = 2, sd = 2)
 
 Estimate_OM_class = function(N, k, p, alpha, beta, X){
   # N number of datapoints
@@ -798,21 +796,6 @@ ConfMatrixAtoA$overall
 
 ```
 
-
-
-
-
-
-
-
-
-- compute and plot expected values of bias in the above plots
-
-- compute variance and std of every parameter individually. gives an idea of efficiency
-
-- investigate why bias sometimes increase as dataset grows larger, maybe check if this is because of Non-convergence! cannot be caused by gradient.
-
-- is there a difference in bias between categories?
 
 
 
