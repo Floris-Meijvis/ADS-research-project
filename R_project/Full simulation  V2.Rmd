@@ -305,9 +305,9 @@ SimulateAVGBias = function(row) {
   for (j in 1:p) {
     beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
     }
-  alpha_M = rnorm(k - 1)
-  alpha_A = sort(runif(k - 1, -1, 1)) 
+  alpha_M = rnorm(k - 1, mean = 0, sd = 1)
   
+  alpha_A = sort(rnorm(k - 1, mean = 0, sd = 1)) 
   beta_A = rnorm(p, mean = 0, sd = 1)
   
   helpMtoM = rep(0, length = Nsim)
@@ -353,7 +353,7 @@ SimulateAVGBias = function(row) {
     error = c(errorintercept, errorcoefs)
     helpMtoM[j] = mean(error)
     
-    ###fitting multinom to Adjacent
+    ###fitting adjacent model to multinom data
     initial_params = c(data_adjacent$alpha, as.vector(data_adjacent$beta))
     initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
 
@@ -376,9 +376,9 @@ SimulateAVGBias = function(row) {
     errorcoefs = abs(data_adjacent$beta - optimized_coefs)
     errorintercept = abs(data_adjacent$alpha - optimized_intercepts)
     error = c(errorintercept, errorcoefs)
-    helpMtoA[j] = mean(error)
+    helpAtoM[j] = mean(error)
     
-    ###fitting Adjacent to Multinom
+    ###fitting Multinom model to adjacent data
     initial_params = c(rep(data_multinom$alpha),  # Intercepts
                    as.vector(data_multinom$beta))   # Coefficients
     initial_params = initial_params + rnorm(length(initial_params)) #add some random noise
@@ -410,7 +410,7 @@ SimulateAVGBias = function(row) {
     errorcoefs = abs(data_multinom$beta - optimized_coefs)
     errorintercept = abs(data_multinom$alpha - optimized_intercepts)
     error = c(errorintercept, errorcoefs)
-    helpAtoM[j] = mean(error)
+    helpMtoA[j] = mean(error)
     
     ###fitting Adjacent to Adjacent
     initial_params = c(data_adjacent$alpha, as.vector(data_adjacent$beta))
@@ -466,67 +466,67 @@ Data = read.table("Sim_ResultsV2", header = TRUE)
 Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoM, color = 'Ord. Mult. data')) + 
-  geom_point(aes(y = BiasAtoM, color = 'Adj. cat. data')) + 
-  #geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. data')) +
-  #geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Adj. cat. data')) + 
+  geom_point(aes(y = BiasMtoA, color = 'Adj. cat. data')) + 
+  geom_errorbar(aes(ymin = pmax(0.01,BiasMtoM - stdMtoM), ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. data')) +
+  geom_errorbar(aes(ymin = pmax(0.01,BiasMtoA - stdMtoA), ymax = BiasMtoA + stdMtoA, color = 'Adj. cat. data')) + 
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
-  labs(title = "Average Bias across all parameters when fitting to Ordinal Multinomial Model") + 
+  labs(title = "Average Bias across all parameters when fitting Ordinal Multinomial Model") + 
   ylab("Bias") + 
-  xlab("N, # datapoints") + 
-  scale_y_log10()
+  scale_y_log10() +  
+  xlab("N, # datapoints")
   
 Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
-  geom_point(aes(y = BiasMtoA, color = 'Ord. Mult. data')) + 
+  geom_point(aes(y = BiasAtoM, color = 'Ord. Mult. data')) + 
   geom_point(aes(y = BiasAtoA, color = 'Adj. cat. data')) + 
-  #geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Ord. Mult. data')) +
-  #geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. data')) + 
+  geom_errorbar(aes(ymin = pmax(0.01,BiasAtoM - stdAtoM), ymax = BiasAtoM + stdAtoM, color = 'Ord. Mult. data')) +
+  geom_errorbar(aes(ymin = pmax(0.01,BiasAtoA - stdAtoA), ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. data')) + 
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
-  labs(title = "Average Bias across all parameters when fitting to Adjacent Categories Model") + 
+  labs(title = "Average Bias across all parameters when fitting Adjacent Categories Model") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")+ 
-  scale_y_log10()
+  scale_y_log10() + 
+  xlab("N, # datapoints")
 
 Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasMtoM, color = 'Ord. Mult. model')) + 
-  geom_point(aes(y = BiasMtoA, color = 'Adj. cat. model')) + 
-  #geom_errorbar(aes(ymin = BiasMtoM - stdMtoM, ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. model'))+
-  #geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'Adj. cat. model')) +
+  geom_point(aes(y = BiasAtoM, color = 'Adj. cat. model')) + 
+  geom_errorbar(aes(ymin = pmax(0.01,BiasMtoM - stdMtoM), ymax = BiasMtoM + stdMtoM, color = 'Ord. Mult. model'))+
+  geom_errorbar(aes(ymin = pmax(0.01,BiasAtoM - stdAtoM), ymax = BiasAtoM + stdAtoM, color = 'Adj. cat. model')) +
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
-  labs(title = "Average Bias across all parameters when fitting Ordinal Multinomial data") + 
+  labs(title = "Average Bias across all parameters when fitting to Ordinal Multinomial data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")+ 
-  scale_y_log10()
+  scale_y_log10() +
+  xlab("N, # datapoints")
 
 Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
-  geom_point(aes(y = BiasAtoM, color = 'Ord. Mult. model')) + 
+  geom_point(aes(y = BiasMtoA, color = 'Ord. Mult. model')) + 
   geom_point(aes(y = BiasAtoA, color = 'Adj. cat. model')) + 
-  #geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'Ord. Mult. model'))+
-  #geom_errorbar(aes(ymin = BiasAtoA - stdAtoA, ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. model')) +
+  geom_errorbar(aes(ymin = pmax(0.01, BiasMtoA - stdMtoA), ymax = BiasMtoA + stdMtoA, color = 'Ord. Mult. model'))+
+  geom_errorbar(aes(ymin = pmax(0.01,BiasAtoA - stdAtoA), ymax = BiasAtoA + stdAtoA, color = 'Adj. cat. model')) +
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
-  labs(title = "Average Bias across all parameters when fitting Adjacent categories data") + 
+  labs(title = "Average Bias across all parameters when fitting to Adjacent categories data") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")+ 
-  scale_y_log10()
+  scale_y_log10() +
+  xlab("N, # datapoints")
 
 Data %>% #filter(N > 30) %>%
   ggplot(aes(x = N)) + 
   geom_point(aes(y = BiasAtoM, color = 'AtoM')) + 
   geom_point(aes(y = BiasMtoA, color = 'MtoA')) + 
-  #geom_errorbar(aes(ymin = BiasAtoM - stdAtoM, ymax = BiasAtoM + stdAtoM, color = 'AtoM'))+
-  #geom_errorbar(aes(ymin = BiasMtoA - stdMtoA, ymax = BiasMtoA + stdMtoA, color = 'MtoA')) +
+  geom_errorbar(aes(ymin = pmax(0.01,BiasAtoM - stdAtoM), ymax = BiasAtoM + stdAtoM, color = 'AtoM'))+
+  geom_errorbar(aes(ymin = pmax(0.01,BiasMtoA - stdMtoA), ymax = BiasMtoA + stdMtoA, color = 'MtoA')) +
   facet_grid(rows = vars(k), cols = vars(p), labeller = labeller(.rows = label_both, .cols = label_both)) + 
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
   labs(title = "model effectiveness comparison") + 
   ylab("Bias") + 
-  xlab("N, # datapoints")+ 
-  scale_y_log10()
+  scale_y_log10() + 
+  xlab("N, # datapoints")
 ```
 
 ```{r}
@@ -605,19 +605,11 @@ TURNS OUT that the way you sample your coefficients can massively impact predict
 
 ```{r}
 #predictive performance test: confusion matrices
-N = 150
+N = 100
 k = 3
 p = 3
+Nsim = 100
 set.seed(seed)
-
-beta_M = matrix(rnorm((k - 1) * p, mean = 2, sd = 2), ncol = p)
-beta_signs = sample(c(-1, 1), p, replace = TRUE)
-for (j in 1:p) {
-  beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
-  }
-alpha_M = rnorm(k - 1, mean = 2, sd = 2)
-alpha_A = sort(rnorm(k - 1, mean = 2, sd = 2)) 
-beta_A = rnorm(p, mean = 2, sd = 2)
 
 Estimate_OM_class = function(N, k, p, alpha, beta, X){
   # N number of datapoints
@@ -670,9 +662,27 @@ Estimate_AC_class = function(N, k, p, alpha, beta, X){
   return(classes)
 }
 
+#storage arrays
+ACC_MtoM = c()
+ACC_AtoM = c()
+ACC_MtoA = c()
+ACC_AtoA = c()
+
+beta_M = matrix(rnorm((k - 1) * p, mean = 2, sd = 2), ncol = p)
+beta_signs = sample(c(-1, 1), p, replace = TRUE)
+for (j in 1:p) {
+  beta_M[, j] = beta_signs[j] * abs(beta_M[, j])
+  }
+alpha_M = rnorm(k - 1, mean = 2, sd = 2)
+alpha_A = sort(rnorm(k - 1, mean = 2, sd = 2)) 
+beta_A = rnorm(p, mean = 2, sd = 2)
+
+for(i in 1:Nsim){
+  
+#sample data
 Data_M = generate_ordinal_multinomial_data(N,k,p,alpha_M,beta_M)
 Data_A = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
-
+  
 ###fitting multinom to multinom
     initial_params = c(rep(Data_M$alpha),  # Intercepts
                    as.vector(Data_M$beta))   # Coefficients
@@ -702,9 +712,9 @@ Data_A = generate_adjacent_categories_data(N, k, p, alpha_A, beta_A)
                          nrow = k-1, 
                          ncol = p)
 
-True_class = Data_M$data$Y
+True_class = factor(Data_M$data$Y, levels = 0:(k-1))
 Pred_class = factor(Estimate_OM_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_M$data[,-1])), levels = 0:(k-1))
-ConfMatrixMtoM = confusionMatrix(True_class, Pred_class)
+ConfMatrixMtoM = confusionMatrix(Pred_class, True_class)
 
 ###fitting AC to Multinom
     initial_params = c(rep(Data_M$alpha),  # Intercepts
@@ -735,10 +745,9 @@ ConfMatrixMtoM = confusionMatrix(True_class, Pred_class)
                          nrow = k-1, 
                          ncol = p)
 
-True_class = Data_A$data$Y
+True_class = factor(Data_A$data$Y, levels = 0:(k-1))
 Pred_class = factor(Estimate_OM_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_A$data[,-1])), levels = 0:(k-1))
-ConfMatrixAtoM = confusionMatrix(True_class, Pred_class)
-    
+ConfMatrixMtoA = confusionMatrix(Pred_class, True_class)
     
 ###fitting multinom to Adjacent
     initial_params = c(Data_A$alpha, as.vector(Data_A$beta))
@@ -759,9 +768,9 @@ ConfMatrixAtoM = confusionMatrix(True_class, Pred_class)
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = optimized_params[k:length(optimized_params)]
     
-True_class = Data_M$data$Y
+True_class = factor(Data_M$data$Y, levels = 0:(k-1))
 Pred_class = factor(Estimate_AC_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_M$data[,-1])), levels = 0:(k-1))
-ConfMatrixMtoA = confusionMatrix(True_class, Pred_class)
+ConfMatrixAtoM = confusionMatrix(Pred_class, True_class)
     
 
     ###fitting Adjacent to Adjacent
@@ -783,19 +792,25 @@ ConfMatrixMtoA = confusionMatrix(True_class, Pred_class)
     optimized_intercepts = optimized_params[1:(k-1)]
     optimized_coefs = optimized_params[k:length(optimized_params)]
     
-True_class = Data_A$data$Y
+True_class = factor(Data_A$data$Y, levels = 0:(k-1))
 Pred_class = factor(Estimate_AC_class(N, k, p, optimized_intercepts, optimized_coefs, as.matrix(Data_A$data[,-1])), levels = 0:(k-1))
-ConfMatrixAtoA = confusionMatrix(True_class, Pred_class)
+ConfMatrixAtoA = confusionMatrix(Pred_class, True_class)
     
+#saving accuracy
+ACC_MtoM[i] = ConfMatrixMtoM$overall[1]
+ACC_MtoA[i] = ConfMatrixMtoA$overall[1]
+ACC_AtoM[i] = ConfMatrixAtoM$overall[1]
+ACC_AtoA[i] = ConfMatrixAtoA$overall[1]
+} 
 
-#prints of accuracy
-ConfMatrixMtoM$overall
-ConfMatrixMtoA$overall
-ConfMatrixAtoM$overall
-ConfMatrixAtoA$overall
-
+sprintf("accuracy MtoM = %.3f +- %.3f", mean(ACC_MtoM), sqrt(var(ACC_MtoM)))
+sprintf("accuracy AtoM = %.3f +- %.3f", mean(ACC_AtoM), sqrt(var(ACC_AtoM)))
+sprintf("accuracy MtoA = %.3f +- %.3f", mean(ACC_MtoA), sqrt(var(ACC_MtoA)))
+sprintf("accuracy AtoA = %.3f +- %.3f", mean(ACC_AtoA), sqrt(var(ACC_AtoA)))
 ```
 
+
+IT IS IN FACT POSSIBLE TO SUM confusion tables with ConfMatrixMtoM$table + ConfMatrixMtoM$table, might be usefull to do so for report
 
 
 
